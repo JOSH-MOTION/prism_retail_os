@@ -394,11 +394,13 @@ export default function Home() {
 
   // Auth States
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [authView, setAuthView] = useState<"login" | "register">("login");
+  const [authView, setAuthView] = useState<"login" | "register" | "forgot" | "reset-password">("login");
   const [username, setUsername] = useState("Alex Sterling");
   const [businessName, setBusinessName] = useState("Stitch & Prism Co.");
   const [email, setEmail] = useState("alex@stitchprism.com");
   const [password, setPassword] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authAlert, setAuthAlert] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -507,7 +509,10 @@ export default function Home() {
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
+        if (event === "PASSWORD_RECOVERY") {
+          setAuthView("reset-password");
+          setIsLoggedIn(false);
+        } else if (session?.user) {
           setIsLoggedIn(true);
           const user = session.user;
           setActiveUserId(user.id);
@@ -855,7 +860,7 @@ export default function Home() {
             password
           });
           if (error) throw error;
-        } else {
+        } else if (authView === "register") {
           const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -884,6 +889,35 @@ export default function Home() {
               }
             ]);
           }
+        } else if (authView === "forgot") {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin
+          });
+          if (error) throw error;
+          setAuthAlert({
+            type: "success",
+            msg: "Password reset instructions have been sent to your email!"
+          });
+        } else if (authView === "reset-password") {
+          if (newPasswordInput !== confirmPasswordInput) {
+            setAuthAlert({ type: "error", msg: "Passwords do not match." });
+            setIsAuthenticating(false);
+            return;
+          }
+          const { error } = await supabase.auth.updateUser({
+            password: newPasswordInput
+          });
+          if (error) throw error;
+          setAuthAlert({
+            type: "success",
+            msg: "Your password has been successfully updated! Redirecting to login..."
+          });
+          setTimeout(() => {
+            setAuthView("login");
+            setNewPasswordInput("");
+            setConfirmPasswordInput("");
+            setAuthAlert(null);
+          }, 2000);
         }
       } catch (err: any) {
         setAuthAlert({ type: "error", msg: err.message || "An authentication error occurred." });
@@ -932,8 +966,7 @@ export default function Home() {
           setWallet(INITIAL_WALLET);
           
           setAuthAlert({ type: "success", msg: "Registered successfully! Loading workspace..." });
-        } else {
-          // Login
+        } else if (authView === "login") {
           const matchedUser = localUsers.find(
             (u: any) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
           );
@@ -966,6 +999,43 @@ export default function Home() {
           localStorage.setItem("sp_transactions", JSON.stringify(matchedUser.transactions || []));
           localStorage.setItem("sp_sales", JSON.stringify(matchedUser.sales || []));
           localStorage.setItem("sp_wallet", JSON.stringify(matchedUser.wallet || INITIAL_WALLET));
+        } else if (authView === "forgot") {
+          const userExists = localUsers.some((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          if (!userExists) {
+            setAuthAlert({ type: "error", msg: "This email address is not registered in our system." });
+            setIsAuthenticating(false);
+            return;
+          }
+          setAuthAlert({
+            type: "info",
+            msg: "Registered account found locally! Redirecting to password reset..."
+          });
+          setTimeout(() => {
+            setAuthView("reset-password");
+            setAuthAlert(null);
+          }, 1000);
+        } else if (authView === "reset-password") {
+          if (newPasswordInput !== confirmPasswordInput) {
+            setAuthAlert({ type: "error", msg: "Passwords do not match." });
+            setIsAuthenticating(false);
+            return;
+          }
+          const userIdx = localUsers.findIndex((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          if (userIdx === -1) {
+            setAuthAlert({ type: "error", msg: "User account session mapping failed." });
+            setIsAuthenticating(false);
+            return;
+          }
+          localUsers[userIdx].password = newPasswordInput;
+          localStorage.setItem("sp_local_users", JSON.stringify(localUsers));
+
+          setAuthAlert({ type: "success", msg: "Password successfully updated! Redirecting to login..." });
+          setTimeout(() => {
+            setAuthView("login");
+            setNewPasswordInput("");
+            setConfirmPasswordInput("");
+            setAuthAlert(null);
+          }, 2000);
         }
         setIsAuthenticating(false);
       }, 500);
