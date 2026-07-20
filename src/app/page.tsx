@@ -938,16 +938,28 @@ export default function Home() {
             return;
           }
 
+          const cachedProducts = localStorage.getItem("sp_products");
+          const cachedPurchases = localStorage.getItem("sp_purchases");
+          const cachedTransactions = localStorage.getItem("sp_transactions");
+          const cachedSales = localStorage.getItem("sp_sales");
+          const cachedWallet = localStorage.getItem("sp_wallet");
+
+          const startProducts = cachedProducts ? JSON.parse(cachedProducts) : INITIAL_PRODUCTS;
+          const startPurchases = cachedPurchases ? JSON.parse(cachedPurchases) : INITIAL_PURCHASES;
+          const startTransactions = cachedTransactions ? JSON.parse(cachedTransactions) : INITIAL_TRANSACTIONS;
+          const startSales = cachedSales ? JSON.parse(cachedSales) : INITIAL_SALES;
+          const startWallet = cachedWallet ? JSON.parse(cachedWallet) : INITIAL_WALLET;
+
           const newUser = {
             username,
             businessName,
             email,
             password,
-            products: INITIAL_PRODUCTS,
-            purchases: INITIAL_PURCHASES,
-            transactions: INITIAL_TRANSACTIONS,
-            sales: INITIAL_SALES,
-            wallet: INITIAL_WALLET
+            products: startProducts,
+            purchases: startPurchases,
+            transactions: startTransactions,
+            sales: startSales,
+            wallet: startWallet
           };
 
           localUsers.push(newUser);
@@ -959,11 +971,11 @@ export default function Home() {
           localStorage.setItem("sp_business_name", businessName);
           localStorage.setItem("sp_email", email);
 
-          setProducts(INITIAL_PRODUCTS);
-          setPurchases(INITIAL_PURCHASES);
-          setTransactions(INITIAL_TRANSACTIONS);
-          setSales(INITIAL_SALES);
-          setWallet(INITIAL_WALLET);
+          setProducts(startProducts);
+          setPurchases(startPurchases);
+          setTransactions(startTransactions);
+          setSales(startSales);
+          setWallet(startWallet);
           
           setAuthAlert({ type: "success", msg: "Registered successfully! Loading workspace..." });
         } else if (authView === "login") {
