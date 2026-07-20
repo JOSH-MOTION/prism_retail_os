@@ -1923,12 +1923,22 @@ export default function Home() {
             <div className="max-w-md mx-auto w-full">
               <div className="mb-8">
                 <h3 className="text-2xl font-bold font-headline-lg mb-1 tracking-tight text-on-surface">
-                  {authView === "login" ? "Welcome back" : "Create business account"}
+                  {authView === "login" 
+                    ? "Welcome back" 
+                    : authView === "register" 
+                      ? "Create business account"
+                      : authView === "forgot"
+                        ? "Reset your password"
+                        : "Enter new password"}
                 </h3>
                 <p className="text-sm text-on-surface-variant font-body-md">
-                  {isDbConnected 
-                    ? "Connect using your Supabase cloud credentials."
-                    : "Running locally via browser local storage cache."}
+                  {authView === "forgot"
+                    ? "We will send instructions to verify and reset your credentials."
+                    : authView === "reset-password"
+                      ? "Choose a strong password to protect your retail OS catalog."
+                      : isDbConnected 
+                        ? "Connect using your Supabase cloud credentials."
+                        : "Running locally via browser local storage cache."}
                 </p>
               </div>
 
@@ -1964,54 +1974,105 @@ export default function Home() {
                   </>
                 )}
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
-                    placeholder="owner@brand.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
-                    Password
-                  </label>
-                  <div className="relative">
+                {(authView === "login" || authView === "register" || authView === "forgot") && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
+                      Email Address
+                    </label>
                     <input
-                      type={showPassword ? "text" : "password"}
+                      type="email"
                       required
-                      className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
+                      placeholder="owner@brand.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface p-1 select-none flex items-center justify-center"
-                      title={showPassword ? "Hide password" : "Show password"}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        {showPassword ? "visibility_off" : "visibility"}
-                      </span>
-                    </button>
                   </div>
-                </div>
+                )}
+
+                {(authView === "login" || authView === "register") && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-outline">
+                        Password
+                      </label>
+                      {authView === "login" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthView("forgot");
+                            setAuthAlert(null);
+                          }}
+                          className="text-xs text-primary hover:underline font-semibold"
+                        >
+                          Forgot Password?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface p-1 select-none flex items-center justify-center"
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {showPassword ? "visibility_off" : "visibility"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {authView === "reset-password" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
+                        placeholder="New Password (min 6 chars)"
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
+                        placeholder="Confirm Password"
+                        value={confirmPasswordInput}
+                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
 
                 {authAlert && (
                   <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-2 border ${
                     authAlert.type === "success" 
                       ? "bg-success-container/10 border-success/20 text-success" 
-                      : "bg-error-container/10 border-error/20 text-error"
+                      : authAlert.type === "info"
+                        ? "bg-primary/10 border-primary/20 text-primary"
+                        : "bg-error-container/10 border-error/20 text-error"
                   }`}>
                     <span className="material-symbols-outlined text-[16px] mt-0.5">
-                      {authAlert.type === "success" ? "check_circle" : "error"}
+                      {authAlert.type === "success" ? "check_circle" : authAlert.type === "info" ? "info" : "error"}
                     </span>
                     <p className="font-semibold">{authAlert.msg}</p>
                   </div>
@@ -2026,8 +2087,12 @@ export default function Home() {
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                   ) : authView === "login" ? (
                     "Sign In to OS"
-                  ) : (
+                  ) : authView === "register" ? (
                     "Setup Workspace"
+                  ) : authView === "forgot" ? (
+                    "Send Reset Link"
+                  ) : (
+                    "Update Password"
                   )}
                   {!isAuthenticating && <span className="material-symbols-outlined text-[18px]">arrow_forward</span>}
                 </button>
@@ -2054,17 +2119,29 @@ export default function Home() {
               </button>
 
               <div className="mt-8 text-center">
-                <button
-                  onClick={() => {
-                    setAuthView(authView === "login" ? "register" : "login");
-                    setAuthAlert(null);
-                  }}
-                  className="text-xs text-primary hover:underline font-semibold"
-                >
-                  {authView === "login"
-                    ? "Don't have an account? Register your boutique"
-                    : "Already have a boutique workspace? Log in here"}
-                </button>
+                {authView === "forgot" || authView === "reset-password" ? (
+                  <button
+                    onClick={() => {
+                      setAuthView("login");
+                      setAuthAlert(null);
+                    }}
+                    className="text-xs text-primary hover:underline font-semibold"
+                  >
+                    Back to Sign In
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setAuthView(authView === "login" ? "register" : "login");
+                      setAuthAlert(null);
+                    }}
+                    className="text-xs text-primary hover:underline font-semibold"
+                  >
+                    {authView === "login"
+                      ? "Don't have an account? Register your boutique"
+                      : "Already have a boutique workspace? Log in here"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
