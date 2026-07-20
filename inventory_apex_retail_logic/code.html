@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Apex Retail Logic - Inventory Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#f7f9fb",
+                    "primary": "#0050cb",
+                    "on-primary-fixed": "#001849",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "on-secondary-container": "#5c647a",
+                    "background": "#f7f9fb",
+                    "surface-container-low": "#f2f4f6",
+                    "on-background": "#191c1e",
+                    "surface-container": "#eceef0",
+                    "inverse-on-surface": "#eff1f3",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "surface-bright": "#f7f9fb",
+                    "surface-tint": "#0054d6",
+                    "inverse-surface": "#2d3133",
+                    "surface-variant": "#e0e3e5",
+                    "surface-dim": "#d8dadc",
+                    "on-secondary-fixed": "#131b2e",
+                    "inverse-primary": "#b3c5ff",
+                    "tertiary": "#4b5a70",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "on-error": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "on-primary-fixed-variant": "#003fa4",
+                    "secondary-container": "#dae2fd",
+                    "on-error-container": "#93000a",
+                    "tertiary-container": "#63738a",
+                    "on-tertiary-container": "#f6f8ff",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-primary-container": "#f8f7ff",
+                    "on-surface-variant": "#424656",
+                    "error": "#ba1a1a",
+                    "on-secondary": "#ffffff",
+                    "secondary": "#565e74",
+                    "primary-fixed": "#dae1ff",
+                    "primary-container": "#0066ff",
+                    "error-container": "#ffdad6",
+                    "secondary-fixed": "#dae2fd",
+                    "surface-container-high": "#e6e8ea",
+                    "outline-variant": "#c2c6d8",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "outline": "#727687",
+                    "primary-fixed-dim": "#b3c5ff",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-primary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "48px",
+                    "margin": "32px",
+                    "base": "8px",
+                    "sm": "12px",
+                    "xs": "4px",
+                    "md": "24px",
+                    "xl": "80px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "display": ["Inter"],
+                    "headline-lg-mobile": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.03em", "fontWeight": "600"}],
+                    "display": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-nav-indicator {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .data-table-row:active {
+            transform: scale(0.995);
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-background antialiased">
+<!-- SideNavBar (Desktop) -->
+<aside class="h-screen w-64 fixed left-0 top-0 hidden lg:flex flex-col bg-surface-container-lowest border-r border-surface-variant flex flex-col h-full py-md z-50">
+<div class="px-6 mb-8">
+<h1 class="font-display text-headline-md text-primary">Apex Retail</h1>
+<p class="text-label-sm text-on-surface-variant">Logic Engine</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-on-secondary-fixed-variant hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-primary font-bold border-l-4 border-primary bg-secondary-container/30" href="#">
+<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+                Inventory
+            </a>
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-on-secondary-fixed-variant hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">shopping_cart</span>
+                Purchases
+            </a>
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-on-secondary-fixed-variant hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">payments</span>
+                Sales
+            </a>
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-on-secondary-fixed-variant hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">analytics</span>
+                Reports
+            </a>
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-on-secondary-fixed-variant hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">account_balance_wallet</span>
+                Wallet
+            </a>
+<a class="flex items-center px-6 py-3 font-body-md text-body-md text-on-secondary-fixed-variant hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">receipt_long</span>
+                Transactions
+            </a>
+</nav>
+<div class="px-6 pt-4 mt-auto">
+<button class="w-full bg-primary text-on-primary py-3 rounded-xl font-label-md flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                New Entry
+            </button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="lg:pl-64 min-h-screen">
+<!-- TopNavBar -->
+<header class="docked full-width top-0 sticky z-40 bg-surface-container-lowest border-b border-surface-variant shadow-sm flex justify-between items-center w-full px-margin h-16">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md hidden md:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container rounded-lg border-none focus:ring-2 focus:ring-primary text-label-md" placeholder="Search inventory..." type="text"/>
+</div>
+<button class="lg:hidden text-on-surface">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-container-high rounded-full relative transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="h-8 w-[1px] bg-outline-variant mx-2"></div>
+<div class="flex items-center gap-3 cursor-pointer group">
+<div class="text-right hidden sm:block">
+<p class="text-label-md font-bold text-on-surface">Alex Rivera</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-wider">Warehouse Manager</p>
+</div>
+<img class="w-10 h-10 rounded-full border border-outline-variant group-hover:border-primary transition-colors" data-alt="A professional studio portrait of a warehouse manager in a clean, modern corporate setting. The lighting is bright and even, highlighting a friendly and confident expression. The background is a blurred high-end retail distribution center with soft blue and white tones that match the Apex Retail Logic brand identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOthcni5epUwSBcPsmMppahn9gamU_hvMPdZFTby3voLZZrQguPyv6uBDGHagPndMUnEFevKZK5hszdrMhef6R1WCqt76zs6nrAcdSa6scUTT2ph_QFILBq4h67R89qP-u9QVr_t8eRxRG6Opi5_o2-N20x-AmdXk88FKxoxfS5a7qQXVqj0YsTf1M-7EMZplPnCZWPyQWcKEb_cumDh8PHWDC1vKHXp8royPFYmIjikZmnC5WdF-RZcqr4PJ_-LzKw-JErq6Ke2E"/>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-margin">
+<!-- Breadcrumbs & Actions -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-lg">
+<div>
+<h2 class="font-headline-md text-on-surface">Inventory Assets</h2>
+<p class="text-body-md text-on-surface-variant">Real-time tracking of product stock and valuation.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline rounded-lg font-label-md hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">filter_list</span>
+                        Filters
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 border border-outline rounded-lg font-label-md hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">file_download</span>
+                        Export
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+                        Add Product
+                    </button>
+</div>
+</div>
+<!-- Stats Overview (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter mb-lg">
+<div class="bg-surface-container-lowest p-md rounded-xl border border-surface-variant shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-primary-container/10 rounded-lg">
+<span class="material-symbols-outlined text-primary">inventory_2</span>
+</div>
+<span class="text-label-sm text-on-surface-variant">+12% vs last month</span>
+</div>
+<p class="text-label-sm text-on-surface-variant">Total SKU Count</p>
+<h3 class="font-display text-headline-md text-on-surface">2,842</h3>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-surface-variant shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-secondary-container/30 rounded-lg">
+<span class="material-symbols-outlined text-secondary">payments</span>
+</div>
+<span class="text-label-sm text-on-surface-variant">Net Value</span>
+</div>
+<p class="text-label-sm text-on-surface-variant">Inventory Valuation</p>
+<h3 class="font-display text-headline-md text-on-surface">$1.24M</h3>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-surface-variant shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-error-container/10 rounded-lg">
+<span class="material-symbols-outlined text-error">warning</span>
+</div>
+<span class="text-label-sm text-error font-bold">14 critical</span>
+</div>
+<p class="text-label-sm text-on-surface-variant">Low Stock Alerts</p>
+<h3 class="font-display text-headline-md text-on-surface">28</h3>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-surface-variant shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-primary-container/20 rounded-lg">
+<span class="material-symbols-outlined text-primary">trending_up</span>
+</div>
+<span class="text-label-sm text-on-surface-variant">Active growth</span>
+</div>
+<p class="text-label-sm text-on-surface-variant">Turnover Rate</p>
+<h3 class="font-display text-headline-md text-on-surface">4.2x</h3>
+</div>
+</div>
+<!-- Inventory Categories Section -->
+<div class="flex gap-4 mb-base overflow-x-auto pb-4 no-scrollbar">
+<button class="px-4 py-2 bg-primary text-on-primary rounded-full font-label-md whitespace-nowrap">All Products</button>
+<button class="px-4 py-2 bg-surface-container-lowest border border-surface-variant text-on-surface-variant rounded-full font-label-md whitespace-nowrap hover:bg-surface-container transition-colors">Apparel</button>
+<button class="px-4 py-2 bg-surface-container-lowest border border-surface-variant text-on-surface-variant rounded-full font-label-md whitespace-nowrap hover:bg-surface-container transition-colors">Electronics</button>
+<button class="px-4 py-2 bg-surface-container-lowest border border-surface-variant text-on-surface-variant rounded-full font-label-md whitespace-nowrap hover:bg-surface-container transition-colors">Accessories</button>
+<button class="px-4 py-2 bg-surface-container-lowest border border-surface-variant text-on-surface-variant rounded-full font-label-md whitespace-nowrap hover:bg-surface-container transition-colors">Footwear</button>
+</div>
+<!-- Inventory Data Table -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-surface-variant">
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Product</th>
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Category</th>
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Qty</th>
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Cost</th>
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Price</th>
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Stock Value</th>
+<th class="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-variant">
+<!-- Row 1 -->
+<tr class="data-table-row hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="A professional product shot of a premium minimalist titanium wristwatch on a clean white background. The lighting is sophisticated with soft shadows, emphasizing the sleek textures of the metal and the precision of the watch face. The overall aesthetic is high-end, clean, and modern, fitting for an Apex Retail Logic inventory system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQp5OEYr_JsrXLW5Aw8ENtWg4I1gbDJ1-oiZaK81Lc9UCaKONNJTmQFC1GQyBg7fAC0TrJ_85b4dcKkd8gWiIqp5NKISnaF7MBmlv2KjM-ejEAfXWpj3Aom49zJtYSqzeq1KLhTHaIJ2e8nj1RgEvtvtkzndzav3DMq0PEBlAoL801kYUVwexqzZxzRAW45_7IdJ-RBhrPK1m1OPWqYssZa1IvMU7c29E2dDl2XNFEDpaXMVXiANuFfvCPTaRzJt3W-SkdAgtleu0"/>
+</div>
+<div>
+<p class="font-label-md text-on-surface group-hover:text-primary transition-colors">Quantum Chronograph</p>
+<p class="text-label-sm text-on-surface-variant">SKU: WA-9023</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-secondary-container/30 text-on-secondary-fixed-variant rounded-full text-label-sm">Accessories</span>
+</td>
+<td class="px-6 py-4 text-right font-body-md">142</td>
+<td class="px-6 py-4 text-right font-body-md">$185.00</td>
+<td class="px-6 py-4 text-right font-body-md font-bold text-on-surface">$395.00</td>
+<td class="px-6 py-4 text-right font-body-md text-primary font-bold">$26,270.00</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-1.5 text-label-sm font-bold text-emerald-600">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                                        In Stock
+                                    </span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="data-table-row hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="Close-up studio photography of a premium noise-canceling headphone in matte slate finish. The shot is taken from a dynamic angle against a soft-focus industrial workspace background. High-contrast lighting highlights the ergonomic design and premium materials, aligning with a professional tech-retail aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOm4bzxFR06VRcqGUP1a5DhmKJUdt9pDH3b0MK2bXQEDz-HYyLNKY6EyiTCvaQhAU_cfgiEf8pbnYKniYXBDL_s6i-x0NmyWGm_RM0EhroYxF4gp4w25nymdofxUvxTIArtp92O_MyWHsx1qtlOxqpo6EqPg90AUuubpzgJtFEqzi8YJleJ8Sdk280n8P3n1eFrUwPZ81LdC6If0PO5cbXEPvcHI-tVxTsh64oGYVN0pDIEBQMC3Bchn9LKAufafhCjs_z8g7dVlg"/>
+</div>
+<div>
+<p class="font-label-md text-on-surface group-hover:text-primary transition-colors">Apex ANC Pro</p>
+<p class="text-label-sm text-on-surface-variant">SKU: AU-5510</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-secondary-container/30 text-on-secondary-fixed-variant rounded-full text-label-sm">Electronics</span>
+</td>
+<td class="px-6 py-4 text-right font-body-md text-error font-bold">12</td>
+<td class="px-6 py-4 text-right font-body-md">$110.00</td>
+<td class="px-6 py-4 text-right font-body-md font-bold text-on-surface">$249.00</td>
+<td class="px-6 py-4 text-right font-body-md text-primary font-bold">$1,320.00</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-1.5 text-label-sm font-bold text-error">
+<span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+                                        Low Stock
+                                    </span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="data-table-row hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="A high-quality lifestyle product image of a charcoal grey technical parka. The garment is presented in a well-lit, minimalist environment with clean lines. The fabric's technical texture and premium zippers are visible, reflecting a focus on quality and durability in a modern retail catalog style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0OPDqP5ELZ-5jsCrZAf9QzSBN9d84xgWB8urqXuGNo5J5S56_XEajzPB_uK3Eod_Xiyiba1WYGSCMALjmX08iucRo-1XaqK0KKdf5aDVAlmF93nN5vfkwjoJHbDZPyNh6GgHTxJY4dF6xclw0naOFV-GhE2kN3zGEDP3_hD15nAJaHET-npEPifovm5w5Ofstr-U1XevjXSXl6wc-gChvHhud_jdEmSsImPIGPr0WAaPaQrGzWXrxJSjxihn-WAqzUUcqcsW_c3c"/>
+</div>
+<div>
+<p class="font-label-md text-on-surface group-hover:text-primary transition-colors">Storm-Shell Parka</p>
+<p class="text-label-sm text-on-surface-variant">SKU: AP-1102</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-secondary-container/30 text-on-secondary-fixed-variant rounded-full text-label-sm">Apparel</span>
+</td>
+<td class="px-6 py-4 text-right font-body-md">86</td>
+<td class="px-6 py-4 text-right font-body-md">$92.00</td>
+<td class="px-6 py-4 text-right font-body-md font-bold text-on-surface">$210.00</td>
+<td class="px-6 py-4 text-right font-body-md text-primary font-bold">$7,912.00</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-1.5 text-label-sm font-bold text-emerald-600">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                                        In Stock
+                                    </span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="data-table-row hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="Elegant product shot of a handcrafted leather briefcase in rich mahogany brown. The lighting creates subtle highlights on the grain of the leather, emphasizing craftsmanship and professional luxury. The setting is a bright, modern studio that suggests high-end fintech or corporate lifestyle." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8gNXqWwFBrSy4iYrSoFz7cO7OLfqwULX8F6qEMQQm5d7Sk_YHvfKJtmgeoipMuQ8DW13LwIRkGA3Oc7BqZMijLJYMj1McTvuw6HrrVwV7KsVxRhv8zbdub-Mhge6RvFsSkicdJMg0Hnqf5le7N5JvSw0kQPeXRJPrf20mM9FHRpdGZ6vLQCRjAQ8G9cQjd_xlXlQnNKmUDoDZr_sCWhlmheFO9SMTZ74h6elSZAIVtC0BErgmqxs95qvSOmxSxa8UUF3IfIzMTXI"/>
+</div>
+<div>
+<p class="font-label-md text-on-surface group-hover:text-primary transition-colors">Executive Briefcase</p>
+<p class="text-label-sm text-on-surface-variant">SKU: AC-4040</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-secondary-container/30 text-on-secondary-fixed-variant rounded-full text-label-sm">Accessories</span>
+</td>
+<td class="px-6 py-4 text-right font-body-md">24</td>
+<td class="px-6 py-4 text-right font-body-md">$145.00</td>
+<td class="px-6 py-4 text-right font-body-md font-bold text-on-surface">$299.00</td>
+<td class="px-6 py-4 text-right font-body-md text-primary font-bold">$3,480.00</td>
+<td class="px-6 py-4">
+<span class="flex items-center gap-1.5 text-label-sm font-bold text-amber-600">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+                                        Reorder
+                                    </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-between">
+<p class="text-label-sm text-on-surface-variant">Showing 1-4 of 2,842 products</p>
+<div class="flex gap-2">
+<button class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors disabled:opacity-50">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<footer class="mt-xl p-margin border-t border-surface-variant text-center">
+<p class="text-label-sm text-on-surface-variant">© 2024 Apex Retail Logic Engine. All rights reserved.</p>
+</footer>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 w-full lg:hidden z-50 bg-surface-container-lowest border-t border-surface-variant shadow-lg flex justify-around items-center h-16 px-4">
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary bg-primary-container/20 rounded-xl px-2 py-1" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="text-[10px] font-label-sm">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="text-[10px] font-label-sm">Sales</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="text-[10px] font-label-sm">Wallet</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="text-[10px] font-label-sm">More</span>
+</a>
+</nav>
+<!-- Detailed Modal Placeholder (Interactive feel) -->
+<div class="fixed inset-0 bg-on-background/20 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4" id="detail-overlay">
+<div class="bg-surface-container-lowest w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+<div class="p-6 border-b border-surface-variant flex justify-between items-center">
+<h3 class="font-headline-md text-on-surface">Product Details</h3>
+<button class="p-2 hover:bg-surface-container rounded-full" onclick="closeDetails()">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="p-8">
+<div class="flex flex-col md:flex-row gap-8">
+<div class="w-full md:w-1/2 aspect-square rounded-xl bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A detailed, macro product shot for a retail inventory system. The image shows the texture and fine details of a luxury item, illuminated by soft, professional studio lighting that emphasizes premium quality and mathematical precision in design." id="detail-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvuqBsB1uGnKBdSB_Mk53WUmitHnvNIOuyQDyo1GwjCfGh7zMWzwNNx04j3PLP_F7C0P0_IRcobIfOl4Tvg8QbcONQHDVPcdxrob55sgeiyxaNUMJ60na2yQwtDRBdgD10AAEOutteOJOEa7r_3tABIEgdRWHaDVNCvxW93bVOHTtnKo1BgP3SIyIZjJ-d3-pwIiO-PwzO64ilA-slNriOzsrYIPaBcjb9Ur5rJ_0A3z0q-deRykf1urqdiDGakvPfakxWNscZsF4"/>
+</div>
+<div class="w-full md:w-1/2 space-y-4">
+<div>
+<p class="text-label-sm text-primary font-bold uppercase tracking-widest">Selected Item</p>
+<h4 class="font-headline-md text-on-surface mt-1" id="detail-name">Product Name</h4>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-3 bg-surface-container rounded-lg">
+<p class="text-label-sm text-on-surface-variant">Available</p>
+<p class="text-body-lg font-bold text-on-surface" id="detail-qty">0</p>
+</div>
+<div class="p-3 bg-surface-container rounded-lg">
+<p class="text-label-sm text-on-surface-variant">Valuation</p>
+<p class="text-body-lg font-bold text-primary" id="detail-val">$0.00</p>
+</div>
+</div>
+<div class="space-y-2">
+<p class="text-label-sm text-on-surface-variant">Inventory Notes</p>
+<p class="text-body-md text-on-surface italic">Stock levels are currently within optimal range for this quarter. Next replenishment scheduled for 14th of next month.</p>
+</div>
+<div class="pt-4 flex gap-3">
+<button class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-label-md">Edit Product</button>
+<button class="px-4 border border-outline rounded-xl"><span class="material-symbols-outlined">more_horiz</span></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+        // Mock Interaction for Table Rows
+        const rows = document.querySelectorAll('.data-table-row');
+        const overlay = document.getElementById('detail-overlay');
+        const detailName = document.getElementById('detail-name');
+        const detailQty = document.getElementById('detail-qty');
+        const detailVal = document.getElementById('detail-val');
+
+        rows.forEach(row => {
+            row.addEventListener('click', () => {
+                const name = row.querySelector('.font-label-md').innerText;
+                const qty = row.querySelectorAll('td')[2].innerText;
+                const val = row.querySelectorAll('td')[5].innerText;
+                
+                detailName.innerText = name;
+                detailQty.innerText = qty;
+                detailVal.innerText = val;
+                
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+            });
+        });
+
+        function closeDetails() {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+        }
+
+        // Close on backdrop click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeDetails();
+        });
+    </script>
+</body></html>

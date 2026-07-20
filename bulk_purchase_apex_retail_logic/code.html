@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Apex Retail Logic - Bulk Purchase Entry</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#f7f9fb",
+                    "primary": "#0050cb",
+                    "on-primary-fixed": "#001849",
+                    "secondary-fixed-dim": "#bec6e0",
+                    "on-secondary-container": "#5c647a",
+                    "background": "#f7f9fb",
+                    "surface-container-low": "#f2f4f6",
+                    "on-background": "#191c1e",
+                    "surface-container": "#eceef0",
+                    "inverse-on-surface": "#eff1f3",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "surface-bright": "#f7f9fb",
+                    "surface-tint": "#0054d6",
+                    "inverse-surface": "#2d3133",
+                    "surface-variant": "#e0e3e5",
+                    "surface-dim": "#d8dadc",
+                    "on-secondary-fixed": "#131b2e",
+                    "inverse-primary": "#b3c5ff",
+                    "tertiary": "#4b5a70",
+                    "tertiary-fixed-dim": "#b7c8e1",
+                    "on-error": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "on-tertiary-fixed-variant": "#38485d",
+                    "on-primary-fixed-variant": "#003fa4",
+                    "secondary-container": "#dae2fd",
+                    "on-error-container": "#93000a",
+                    "tertiary-container": "#63738a",
+                    "on-tertiary-container": "#f6f8ff",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-primary-container": "#f8f7ff",
+                    "on-surface-variant": "#424656",
+                    "error": "#ba1a1a",
+                    "on-secondary": "#ffffff",
+                    "secondary": "#565e74",
+                    "primary-fixed": "#dae1ff",
+                    "primary-container": "#0066ff",
+                    "error-container": "#ffdad6",
+                    "secondary-fixed": "#dae2fd",
+                    "surface-container-high": "#e6e8ea",
+                    "outline-variant": "#c2c6d8",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-tertiary-fixed": "#0b1c30",
+                    "outline": "#727687",
+                    "primary-fixed-dim": "#b3c5ff",
+                    "tertiary-fixed": "#d3e4fe",
+                    "on-primary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "48px",
+                    "margin": "32px",
+                    "base": "8px",
+                    "sm": "12px",
+                    "xs": "4px",
+                    "md": "24px",
+                    "xl": "80px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "display": ["Inter"],
+                    "headline-lg-mobile": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.03em", "fontWeight": "600"}],
+                    "display": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar for data density */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e0e3e5; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #c2c6d8; }
+        
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .parsing-animation { animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- Side Navigation Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 hidden lg:flex flex-col bg-surface-container-lowest border-r border-surface-variant z-50">
+<div class="flex flex-col h-full py-md">
+<div class="px-md mb-lg">
+<div class="flex items-center gap-base">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">account_tree</span>
+</div>
+<div>
+<h1 class="font-display text-headline-md text-primary leading-none">Apex Retail</h1>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Logic Engine</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-xs px-base">
+<a class="flex items-center gap-sm px-sm py-base rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-base rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-base rounded-lg text-primary font-bold border-l-4 border-primary bg-secondary-container/30 transition-all scale-[0.98]" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">shopping_cart</span>
+<span class="font-body-md text-body-md">Purchases</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-base rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-md text-body-md">Sales</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-base rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-body-md text-body-md">Reports</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-base rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-body-md text-body-md">Wallet</span>
+</a>
+</nav>
+<div class="px-md mt-auto pt-md border-t border-surface-variant/50">
+<button class="w-full bg-primary text-white py-base rounded-xl font-label-md text-label-md flex items-center justify-center gap-xs hover:shadow-lg transition-all active:scale-95">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+                    New Entry
+                </button>
+</div>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="docked full-width top-0 sticky z-40 bg-surface-container-lowest border-b border-surface-variant shadow-sm flex justify-between items-center w-full px-margin h-16 lg:pl-72">
+<div class="flex items-center gap-md w-1/2">
+<div class="relative w-full max-w-md hidden md:block">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container border-none rounded-full py-2 pl-10 text-label-md focus:ring-2 focus:ring-primary/20" placeholder="Search orders, SKU, or logic..." type="text"/>
+</div>
+<div class="lg:hidden">
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface">Apex Retail Logic</h1>
+</div>
+</div>
+<div class="flex items-center gap-base">
+<button class="p-base hover:bg-surface-container-high rounded-full transition-all active:opacity-80 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-surface-container-lowest"></span>
+</button>
+<button class="p-base hover:bg-surface-container-high rounded-full transition-all active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="h-8 w-[1px] bg-surface-variant mx-base"></div>
+<div class="flex items-center gap-sm hover:bg-surface-container-high p-xs pr-base rounded-full cursor-pointer transition-all">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional studio portrait of a corporate executive for a retail technology company, wearing a dark blazer over a crisp white shirt, minimalist lighting, clean white background, high-resolution digital photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAjDkpqPnM-Pg77evzgT0cUo10MJTr4KvMZcb80U3Ct4hsMCga8A5WsFTWYr34bFQLUomjBZV5cRRRsjzK0svscmQQwtlSOglboKbo0EQdeYKnY0_jKHTM0aNS7XBIw7V6JXPrTdT0sig8Ab2Dxdgw_J-3BTz8Mb533wV5VNw1ueriVu5oD8mCmpSNXUaSqrYHA7EkXKj5ybT3bBMzUP-Qg5tl7_EyhDRWbBsSugJkva1F9CJk8qXfnVm-cC6guL_vykPn3BTMgXQ"/>
+</div>
+<span class="font-label-md text-label-md hidden md:block">Alex Sterling</span>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="lg:pl-64 min-h-screen">
+<div class="max-w-[1200px] mx-auto p-margin mb-32">
+<!-- Page Header -->
+<div class="mb-lg flex flex-col md:flex-row md:items-end justify-between gap-md">
+<div>
+<nav class="flex items-center gap-xs text-on-surface-variant mb-xs">
+<span class="font-label-sm text-label-sm">Purchases</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="font-label-sm text-label-sm text-primary">Bulk Entry</span>
+</nav>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Bulk Purchase Entry</h2>
+<p class="text-on-surface-variant font-body-md text-body-md mt-xs">Convert natural inventory strings into structured warehouse data.</p>
+</div>
+<div class="flex gap-base">
+<button class="px-md py-base border border-outline-variant rounded-lg font-label-md text-label-md hover:bg-surface-container transition-all active:scale-95 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[20px]">upload_file</span>
+                        Import CSV
+                    </button>
+<button class="px-md py-base bg-primary text-white rounded-lg font-label-md text-label-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[20px]">save</span>
+                        Commit Batch
+                    </button>
+</div>
+</div>
+<!-- Bento Layout Content -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- Input Section -->
+<div class="col-span-12 lg:col-span-5 flex flex-col gap-gutter">
+<div class="bg-surface-container-lowest border border-surface-variant rounded-xl p-md shadow-sm h-full flex flex-col">
+<div class="flex items-center justify-between mb-md">
+<h3 class="font-label-md text-label-md flex items-center gap-xs uppercase tracking-wider text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">edit_note</span>
+                                Raw Inventory Input
+                            </h3>
+<button class="text-error font-label-sm text-label-sm hover:underline" id="clearBtn">Clear Canvas</button>
+</div>
+<textarea class="flex-1 w-full p-md bg-surface font-body-md text-body-md rounded-lg border-surface-variant focus:ring-primary focus:border-primary min-h-[350px] resize-none placeholder:text-outline/50" id="inventoryInput" placeholder="Paste data here...
+Example:
+Navy Blue: 5 Large, 3 XL
+Sunset Red: 12 Medium, 10 Small
+Charcoal Grey: 8 XL"></textarea>
+<div class="mt-md">
+<button class="w-full bg-primary-container text-on-primary-container h-12 rounded-lg font-label-md text-label-md flex items-center justify-center gap-base hover:shadow-md transition-all active:scale-95 group" id="parseBtn">
+<span class="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
+                                Parse Data Matrix
+                            </button>
+</div>
+</div>
+</div>
+<!-- Preview Table Section -->
+<div class="col-span-12 lg:col-span-7">
+<div class="bg-surface-container-lowest border border-surface-variant rounded-xl shadow-sm h-full flex flex-col overflow-hidden">
+<div class="p-md border-b border-surface-variant flex items-center justify-between bg-surface-container-low/50">
+<h3 class="font-label-md text-label-md flex items-center gap-xs uppercase tracking-wider text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">table_chart</span>
+                                Logic Preview Table
+                            </h3>
+<div class="flex items-center gap-base">
+<div class="hidden flex items-center gap-xs bg-emerald-100 text-emerald-700 px-sm py-1 rounded-full text-[10px] font-bold uppercase tracking-tight" id="statusIndicator">
+<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                                    Sync Ready
+                                </div>
+<span class="font-label-sm text-label-sm text-on-surface-variant" id="itemCount">0 items detected</span>
+</div>
+</div>
+<div class="flex-1 overflow-auto max-h-[480px]">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-surface-container-low z-10">
+<tr class="border-b border-surface-variant">
+<th class="px-md py-sm font-label-sm text-label-sm text-on-surface-variant">Color / Variant</th>
+<th class="px-md py-sm font-label-sm text-label-sm text-on-surface-variant text-center">Size</th>
+<th class="px-md py-sm font-label-sm text-label-sm text-on-surface-variant text-right">Quantity</th>
+<th class="px-md py-sm font-label-sm text-label-sm text-on-surface-variant text-right">Est. Unit Cost</th>
+</tr>
+</thead>
+<tbody id="previewBody">
+<!-- Empty State -->
+<tr id="emptyState">
+<td class="py-xl text-center" colspan="4">
+<div class="flex flex-col items-center opacity-40">
+<span class="material-symbols-outlined text-[48px] mb-base">data_array</span>
+<p class="font-body-md text-body-md">No data parsed yet</p>
+<p class="font-label-sm text-label-sm">Enter strings on the left to begin</p>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Summary Sticky Footer within Card -->
+<div class="p-md bg-primary-container text-on-primary-container border-t border-primary/20 flex flex-wrap gap-md justify-between items-center">
+<div class="flex gap-lg">
+<div>
+<p class="text-[10px] uppercase font-bold opacity-70">Total Batch Quantity</p>
+<p class="font-headline-md text-headline-md leading-tight" id="totalQty">0</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold opacity-70">Estimated Purchase Value</p>
+<p class="font-headline-md text-headline-md leading-tight" id="totalCost">$0.00</p>
+</div>
+</div>
+<div class="hidden md:block">
+<div class="flex items-center gap-xs px-sm py-1 bg-white/20 rounded-lg text-label-sm">
+<span class="material-symbols-outlined text-[16px]">info</span>
+                                    Valuations based on last SKU purchase price
+                                </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Contextual Actions -->
+<div class="mt-lg grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<div class="bg-white border border-surface-variant p-md rounded-xl flex items-start gap-md group hover:border-primary transition-all cursor-pointer">
+<div class="p-sm bg-secondary-container/50 rounded-lg text-primary">
+<span class="material-symbols-outlined">label</span>
+</div>
+<div>
+<h4 class="font-label-md text-label-md">Auto-Tagging Logic</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Automatically assign department tags based on color name matches.</p>
+</div>
+</div>
+<div class="bg-white border border-surface-variant p-md rounded-xl flex items-start gap-md group hover:border-primary transition-all cursor-pointer">
+<div class="p-sm bg-secondary-container/50 rounded-lg text-primary">
+<span class="material-symbols-outlined">history</span>
+</div>
+<div>
+<h4 class="font-label-md text-label-md">Purchase History</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Compare current batch pricing with average historical costs.</p>
+</div>
+</div>
+<div class="bg-white border border-surface-variant p-md rounded-xl flex items-start gap-md group hover:border-primary transition-all cursor-pointer">
+<div class="p-sm bg-secondary-container/50 rounded-lg text-primary">
+<span class="material-symbols-outlined">rule_folder</span>
+</div>
+<div>
+<h4 class="font-label-md text-label-md">Validation Rules</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Run batch through inventory integrity checks before committing.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Mobile Bottom Navigation -->
+<nav class="fixed bottom-0 w-full lg:hidden z-50 bg-surface-container-lowest border-t border-surface-variant shadow-lg flex justify-around items-center h-16 px-4">
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-sm text-label-sm">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary bg-primary-container/20 rounded-xl px-2 py-1" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_box</span>
+<span class="font-label-sm text-label-sm">Sales</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-label-sm text-label-sm">Wallet</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-sm text-label-sm">More</span>
+</a>
+</nav>
+<script>
+        const parseBtn = document.getElementById('parseBtn');
+        const inventoryInput = document.getElementById('inventoryInput');
+        const previewBody = document.getElementById('previewBody');
+        const emptyState = document.getElementById('emptyState');
+        const totalQtyEl = document.getElementById('totalQty');
+        const totalCostEl = document.getElementById('totalCost');
+        const itemCountEl = document.getElementById('itemCount');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const clearBtn = document.getElementById('clearBtn');
+
+        const UNIT_COSTS = {
+            'Small': 12.50,
+            'Medium': 14.00,
+            'Large': 15.50,
+            'XL': 17.00,
+            '2XL': 19.50,
+            'Default': 15.00
+        };
+
+        clearBtn.addEventListener('click', () => {
+            inventoryInput.value = '';
+            previewBody.innerHTML = '';
+            previewBody.appendChild(emptyState);
+            updateSummary(0, 0);
+            itemCountEl.innerText = '0 items detected';
+            statusIndicator.classList.add('hidden');
+        });
+
+        parseBtn.addEventListener('click', () => {
+            const rawText = inventoryInput.value.trim();
+            if (!rawText) return;
+
+            // Trigger Animation
+            parseBtn.disabled = true;
+            parseBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Parsing Matrix...';
+            
+            setTimeout(() => {
+                const lines = rawText.split('\n');
+                const parsedItems = [];
+                let totalQty = 0;
+                let totalCost = 0;
+
+                lines.forEach(line => {
+                    const [colorPart, itemsPart] = line.split(':');
+                    if (colorPart && itemsPart) {
+                        const color = colorPart.trim();
+                        const variants = itemsPart.split(',');
+                        
+                        variants.forEach(variant => {
+                            const match = variant.trim().match(/(\d+)\s+(.+)/);
+                            if (match) {
+                                const qty = parseInt(match[1]);
+                                const size = match[2].trim();
+                                const unitCost = UNIT_COSTS[size] || UNIT_COSTS['Default'];
+                                
+                                parsedItems.push({
+                                    color,
+                                    size,
+                                    qty,
+                                    unitCost
+                                });
+                                totalQty += qty;
+                                totalCost += (qty * unitCost);
+                            }
+                        });
+                    }
+                });
+
+                renderTable(parsedItems);
+                updateSummary(totalQty, totalCost);
+                
+                parseBtn.disabled = false;
+                parseBtn.innerHTML = '<span class="material-symbols-outlined">sync</span> Parse Data Matrix';
+                statusIndicator.classList.remove('hidden');
+            }, 800);
+        });
+
+        function renderTable(items) {
+            if (items.length === 0) {
+                previewBody.innerHTML = '';
+                previewBody.appendChild(emptyState);
+                return;
+            }
+
+            previewBody.innerHTML = '';
+            items.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-surface-variant hover:bg-surface transition-colors group cursor-default';
+                row.innerHTML = `
+                    <td class="px-md py-sm">
+                        <div class="flex items-center gap-sm">
+                            <div class="w-3 h-3 rounded-full bg-primary/20 border border-primary/40"></div>
+                            <span class="font-body-md text-body-md font-medium text-on-surface">${item.color}</span>
+                        </div>
+                    </td>
+                    <td class="px-md py-sm text-center">
+                        <span class="inline-block px-sm py-0.5 bg-surface-container-high rounded text-label-sm text-on-secondary-fixed-variant border border-outline-variant/30">${item.size}</span>
+                    </td>
+                    <td class="px-md py-sm text-right font-mono font-bold text-primary">${item.qty}</td>
+                    <td class="px-md py-sm text-right text-on-surface-variant font-label-md">$${item.unitCost.toFixed(2)}</td>
+                `;
+                previewBody.appendChild(row);
+            });
+            itemCountEl.innerText = `${items.length} items detected`;
+        }
+
+        function updateSummary(qty, cost) {
+            totalQtyEl.innerText = qty.toLocaleString();
+            totalCostEl.innerText = `$${cost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+    </script>
+</body></html>

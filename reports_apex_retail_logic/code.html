@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Apex Retail Logic - Reports</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container { position: relative; height: 100%; width: 100%; }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid #E2E8F0;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+        .active-pill {
+            position: absolute;
+            left: 0;
+            width: 4px;
+            height: 24px;
+            background-color: #0050cb;
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#f7f9fb",
+                        "primary": "#0050cb",
+                        "on-primary-fixed": "#001849",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-secondary-container": "#5c647a",
+                        "background": "#f7f9fb",
+                        "surface-container-low": "#f2f4f6",
+                        "on-background": "#191c1e",
+                        "surface-container": "#eceef0",
+                        "inverse-on-surface": "#eff1f3",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-bright": "#f7f9fb",
+                        "surface-tint": "#0054d6",
+                        "inverse-surface": "#2d3133",
+                        "surface-variant": "#e0e3e5",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-fixed": "#131b2e",
+                        "inverse-primary": "#b3c5ff",
+                        "tertiary": "#4b5a70",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "on-error": "#ffffff",
+                        "on-surface": "#191c1e",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "on-primary-fixed-variant": "#003fa4",
+                        "secondary-container": "#dae2fd",
+                        "on-error-container": "#93000a",
+                        "tertiary-container": "#63738a",
+                        "on-tertiary-container": "#f6f8ff",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-primary-container": "#f8f7ff",
+                        "on-surface-variant": "#424656",
+                        "error": "#ba1a1a",
+                        "on-secondary": "#ffffff",
+                        "secondary": "#565e74",
+                        "primary-fixed": "#dae1ff",
+                        "primary-container": "#0066ff",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#dae2fd",
+                        "surface-container-high": "#e6e8ea",
+                        "outline-variant": "#c2c6d8",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "outline": "#727687",
+                        "primary-fixed-dim": "#b3c5ff",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-primary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "48px",
+                        "margin": "32px",
+                        "base": "8px",
+                        "sm": "12px",
+                        "xs": "4px",
+                        "md": "24px",
+                        "xl": "80px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "display": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-sm": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md">
+<!-- SideNavBar (Desktop Only) -->
+<aside class="h-screen w-64 fixed left-0 top-0 hidden lg:flex flex-col bg-surface-container-lowest border-r border-surface-variant z-50">
+<div class="flex flex-col h-full py-md">
+<div class="px-md mb-xl">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-md">analytics</span>
+</div>
+<div>
+<h1 class="font-display text-headline-md text-primary leading-none">Apex Retail</h1>
+<p class="text-[10px] uppercase tracking-widest text-on-secondary-container font-bold">Logic Engine</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-xs">
+<a class="flex items-center px-md py-sm text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group relative" href="#">
+<span class="material-symbols-outlined mr-base">dashboard</span>
+<span class="font-label-md">Dashboard</span>
+</a>
+<a class="flex items-center px-md py-sm text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined mr-base">inventory_2</span>
+<span class="font-label-md">Inventory</span>
+</a>
+<a class="flex items-center px-md py-sm text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined mr-base">shopping_cart</span>
+<span class="font-label-md">Purchases</span>
+</a>
+<a class="flex items-center px-md py-sm text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined mr-base">payments</span>
+<span class="font-label-md">Sales</span>
+</a>
+<a class="flex items-center px-md py-sm text-primary font-bold border-l-4 border-primary bg-secondary-container/30 relative" href="#">
+<span class="material-symbols-outlined mr-base" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-label-md">Reports</span>
+</a>
+<a class="flex items-center px-md py-sm text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined mr-base">account_balance_wallet</span>
+<span class="font-label-md">Wallet</span>
+</a>
+<a class="flex items-center px-md py-sm text-on-secondary-fixed-variant hover:bg-surface-container transition-colors group" href="#">
+<span class="material-symbols-outlined mr-base">receipt_long</span>
+<span class="font-label-md">Transactions</span>
+</a>
+</nav>
+<div class="px-md mt-auto pt-md">
+<button class="w-full bg-primary text-white font-label-md py-sm rounded-xl flex items-center justify-center gap-xs active:scale-[0.98] transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                    New Entry
+                </button>
+</div>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="docked full-width top-0 sticky z-40 bg-surface-container-lowest border-b border-surface-variant shadow-sm flex justify-between items-center w-full px-margin h-16 lg:pl-72">
+<div class="flex items-center gap-md">
+<h2 class="font-headline-md text-on-surface font-bold hidden md:block">Reports</h2>
+<div class="relative group">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center text-outline pointer-events-none">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="pl-10 pr-md py-1.5 bg-surface-container rounded-full border-none focus:ring-2 focus:ring-primary w-64 text-label-md" placeholder="Search analytics..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="hidden md:flex bg-surface-container rounded-lg p-1">
+<button class="px-md py-1 text-label-sm font-bold bg-white rounded-md shadow-sm">Week</button>
+<button class="px-md py-1 text-label-sm text-on-surface-variant">Month</button>
+<button class="px-md py-1 text-label-sm text-on-surface-variant">Year</button>
+</div>
+<button class="text-on-surface-variant hover:bg-surface-container-high p-2 rounded-full transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-container-high p-2 rounded-full transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-secondary-container overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a corporate analyst in a well-lit modern office. He is smiling slightly, wearing a charcoal blazer over a crisp white shirt. The background is blurred with soft bokeh of glass partitions and warm indoor plants, maintaining a high-fidelity light-mode corporate aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6x1sJ9Q-0vQUXLCpJWS0Qa7q3EGAZ8VPZ7kg9X6N2fMpaYeowpXCLVhTU45MVWcZpqcINNh6wQOJXKxPqJuKzMuwzwEZsOAEsNDFRCJ8eS9pxzTyTaFTPLLMuT_xqB3usRUzO2YgLK4hBaC4uJo6uIlPfxzITz5yyEXolvqKHlT8BExNn25qJN9s9B57GegYajRMt32IfIxZ1l68Yq6R63B4xAsQROjuyqJiPCAXv7MbigmgsBeycwvRl6TlHv1LtOgHSEdy3Gqw"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="lg:ml-64 p-margin min-h-[calc(100vh-64px)] pb-32">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-md mb-lg">
+<div>
+<p class="text-on-secondary-fixed-variant font-label-md mb-xs uppercase tracking-widest">Business Intelligence</p>
+<h1 class="font-headline-lg text-on-surface">Analytics Engine <span class="text-primary">v4.2</span></h1>
+</div>
+<div class="flex items-center gap-sm">
+<div class="bg-white border border-outline-variant rounded-xl px-md py-sm flex items-center gap-sm shadow-sm cursor-pointer hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">calendar_today</span>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-outline-variant uppercase">Time Period</span>
+<span class="text-label-md font-bold text-on-surface">Oct 1 - Oct 31, 2023</span>
+</div>
+<span class="material-symbols-outlined text-outline">expand_more</span>
+</div>
+<button class="bg-surface-container-highest border border-outline-variant text-on-surface font-label-md px-md h-12 rounded-xl flex items-center gap-xs hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">download</span>
+                    Export
+                </button>
+</div>
+</div>
+<!-- Key Metrics Bento Grid -->
+<div class="bento-grid mb-lg">
+<!-- Revenue Card -->
+<div class="col-span-12 md:col-span-4 glass-card p-md rounded-xl">
+<div class="flex justify-between items-start mb-md">
+<div>
+<p class="text-on-surface-variant text-label-sm uppercase font-bold">Total Revenue</p>
+<h3 class="font-headline-md text-on-surface mt-xs">$1,248,300</h3>
+</div>
+<div class="bg-secondary-container/40 p-2 rounded-lg">
+<span class="material-symbols-outlined text-primary">payments</span>
+</div>
+</div>
+<div class="flex items-center gap-xs text-emerald-600 mb-md">
+<span class="material-symbols-outlined text-[18px]">trending_up</span>
+<span class="text-label-md font-bold">+12.4% vs last month</span>
+</div>
+<div class="h-24 w-full">
+<canvas id="miniRevenueChart"></canvas>
+</div>
+</div>
+<!-- Profit Card -->
+<div class="col-span-12 md:col-span-4 glass-card p-md rounded-xl">
+<div class="flex justify-between items-start mb-md">
+<div>
+<p class="text-on-surface-variant text-label-sm uppercase font-bold">Net Profit</p>
+<h3 class="font-headline-md text-on-surface mt-xs">$428,950</h3>
+</div>
+<div class="bg-secondary-container/40 p-2 rounded-lg">
+<span class="material-symbols-outlined text-primary">account_balance_wallet</span>
+</div>
+</div>
+<div class="flex items-center gap-xs text-emerald-600 mb-md">
+<span class="material-symbols-outlined text-[18px]">trending_up</span>
+<span class="text-label-md font-bold">+8.2% vs last month</span>
+</div>
+<div class="h-24 w-full">
+<canvas id="miniProfitChart"></canvas>
+</div>
+</div>
+<!-- Inventory Value Card -->
+<div class="col-span-12 md:col-span-4 glass-card p-md rounded-xl">
+<div class="flex justify-between items-start mb-md">
+<div>
+<p class="text-on-surface-variant text-label-sm uppercase font-bold">Inventory Value</p>
+<h3 class="font-headline-md text-on-surface mt-xs">$2,840,000</h3>
+</div>
+<div class="bg-secondary-container/40 p-2 rounded-lg">
+<span class="material-symbols-outlined text-primary">inventory_2</span>
+</div>
+</div>
+<div class="flex items-center gap-xs text-error mb-md">
+<span class="material-symbols-outlined text-[18px]">trending_down</span>
+<span class="text-label-md font-bold">-2.1% vs last month</span>
+</div>
+<div class="h-24 w-full">
+<canvas id="miniInventoryChart"></canvas>
+</div>
+</div>
+<!-- Main Sales Performance Chart -->
+<div class="col-span-12 md:col-span-8 glass-card p-md rounded-xl h-[400px]">
+<div class="flex justify-between items-center mb-lg">
+<div>
+<h4 class="font-headline-md text-on-surface">Sales Performance</h4>
+<p class="text-on-surface-variant text-label-sm">Daily transaction volume and revenue mapping</p>
+</div>
+<div class="flex items-center gap-base">
+<div class="flex items-center gap-xs">
+<span class="w-3 h-3 bg-primary rounded-full"></span>
+<span class="text-label-sm font-medium">Revenue</span>
+</div>
+<div class="flex items-center gap-xs">
+<span class="w-3 h-3 bg-secondary-fixed-dim rounded-full"></span>
+<span class="text-label-sm font-medium">Projection</span>
+</div>
+</div>
+</div>
+<div class="chart-container">
+<canvas id="mainPerformanceChart"></canvas>
+</div>
+</div>
+<!-- Capital Growth Widget -->
+<div class="col-span-12 md:col-span-4 glass-card p-md rounded-xl flex flex-col h-[400px]">
+<h4 class="font-headline-md text-on-surface mb-xs">Capital Growth</h4>
+<p class="text-on-surface-variant text-label-sm mb-lg">Aggregated asset appreciation</p>
+<div class="flex-1 flex flex-col justify-center items-center relative">
+<div class="w-48 h-48">
+<canvas id="growthDoughnut"></canvas>
+</div>
+<div class="absolute flex flex-col items-center">
+<span class="text-headline-md font-bold text-on-surface">+18.5%</span>
+<span class="text-[10px] uppercase font-bold text-outline">Annual</span>
+</div>
+</div>
+<div class="mt-auto space-y-sm">
+<div class="flex justify-between items-center">
+<span class="text-label-md text-on-surface-variant">Market Capital</span>
+<span class="text-label-md font-bold text-on-surface">$12.4M</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-1.5">
+<div class="bg-primary h-full rounded-full" style="width: 75%"></div>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-label-md text-on-surface-variant">Liabilities</span>
+<span class="text-label-md font-bold text-on-surface">$3.2M</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-1.5">
+<div class="bg-secondary-fixed-dim h-full rounded-full" style="width: 25%"></div>
+</div>
+</div>
+</div>
+<!-- Regional Sales Map/Table -->
+<div class="col-span-12 glass-card p-md rounded-xl">
+<div class="flex flex-col md:flex-row justify-between gap-md">
+<div class="md:w-1/3">
+<h4 class="font-headline-md text-on-surface mb-xs">Regional Sales Distribution</h4>
+<p class="text-on-surface-variant text-label-sm mb-lg">Performance overview by physical locations</p>
+<div class="space-y-md">
+<div class="flex items-center justify-between p-sm hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer group">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 bg-primary rounded-full"></span>
+<div>
+<p class="text-label-md font-bold text-on-surface">New York Hub</p>
+<p class="text-[10px] text-outline uppercase font-bold">Region A</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-label-md font-bold text-on-surface">$420k</p>
+<p class="text-[10px] text-emerald-600 font-bold">+4%</p>
+</div>
+</div>
+<div class="flex items-center justify-between p-sm hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer group">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 bg-tertiary-container rounded-full"></span>
+<div>
+<p class="text-label-md font-bold text-on-surface">London Fleet</p>
+<p class="text-[10px] text-outline uppercase font-bold">Region B</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-label-md font-bold text-on-surface">$385k</p>
+<p class="text-[10px] text-emerald-600 font-bold">+12%</p>
+</div>
+</div>
+<div class="flex items-center justify-between p-sm hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer group">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 bg-secondary-fixed-dim rounded-full"></span>
+<div>
+<p class="text-label-md font-bold text-on-surface">Tokyo Node</p>
+<p class="text-[10px] text-outline uppercase font-bold">Region C</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-label-md font-bold text-on-surface">$290k</p>
+<p class="text-[10px] text-error font-bold">-2%</p>
+</div>
+</div>
+</div>
+</div>
+<div class="md:w-2/3 h-64 rounded-xl overflow-hidden border border-outline-variant relative">
+<div class="bg-cover bg-center w-full h-full" data-alt="A stylized high-tech world map visualization in a dark navy and electric blue color scheme. Circular glowing data points pulsate over major global cities like New York, London, and Tokyo. The map is minimalist, using clean line art with subtle grid overlays, suggesting a sophisticated global logistics and retail network in real-time." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC3cVIoVG2OFCqBHAooZBlDPAfuMPHaWA9h3UJ3l0WbF9nfk_pEahqvz-04-FOemqqpQizN_ra8LhvUtG0ntzl5B1QuYLj-9AStC5skKsejFIWnhDBESJOg7CDhR30M1XBBvyJbLcfdv1rjg0FqspmnxNUJc5J-PjTLKDQhziXupG7I3Xj7dS8fmjsa826vkVHAu-o99bOw0LVlL1RE_v6oik996bby_k8VZEbDhoWQeHSZsCitDQ-6NzxVVtqHvnGdxm5EmgJ2qFE')"></div>
+<div class="absolute bottom-md right-md bg-white p-sm rounded-lg shadow-lg border border-outline-variant">
+<p class="text-[10px] font-bold text-outline-variant uppercase mb-xs">Active Sessions</p>
+<div class="flex items-center gap-sm">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-white bg-primary-container"></div>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-secondary-container"></div>
+<div class="w-6 h-6 rounded-full border-2 border-white bg-tertiary-container"></div>
+</div>
+<span class="text-label-sm font-bold text-on-surface">24 Managers Online</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 w-full lg:hidden z-50 bg-surface-container-lowest border-t border-surface-variant shadow-lg flex justify-around items-center h-16 px-4">
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-sm">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm">Sales</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary bg-primary-container/20 rounded-xl px-4 py-1" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-label-sm">Reports</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-sm">More</span>
+</a>
+</nav>
+<script>
+        // Common Chart Config
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { display: false }, y: { display: false } },
+            elements: { point: { radius: 0 }, line: { tension: 0.4 } }
+        };
+
+        // Mini Charts
+        const miniRevenueCtx = document.getElementById('miniRevenueChart').getContext('2d');
+        new Chart(miniRevenueCtx, {
+            type: 'line',
+            data: {
+                labels: [1, 2, 3, 4, 5, 6, 7],
+                datasets: [{
+                    data: [12, 19, 15, 25, 22, 30, 28],
+                    borderColor: '#0050cb',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(0, 80, 203, 0.1)'
+                }]
+            },
+            options: commonOptions
+        });
+
+        const miniProfitCtx = document.getElementById('miniProfitChart').getContext('2d');
+        new Chart(miniProfitCtx, {
+            type: 'line',
+            data: {
+                labels: [1, 2, 3, 4, 5, 6, 7],
+                datasets: [{
+                    data: [8, 12, 10, 18, 14, 20, 19],
+                    borderColor: '#4b5a70',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(75, 90, 112, 0.1)'
+                }]
+            },
+            options: commonOptions
+        });
+
+        const miniInventoryCtx = document.getElementById('miniInventoryChart').getContext('2d');
+        new Chart(miniInventoryCtx, {
+            type: 'line',
+            data: {
+                labels: [1, 2, 3, 4, 5, 6, 7],
+                datasets: [{
+                    data: [30, 28, 35, 22, 25, 18, 15],
+                    borderColor: '#ba1a1a',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(186, 26, 26, 0.1)'
+                }]
+            },
+            options: commonOptions
+        });
+
+        // Main Performance Chart
+        const mainCtx = document.getElementById('mainPerformanceChart').getContext('2d');
+        new Chart(mainCtx, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [
+                    {
+                        label: 'Actual Revenue',
+                        data: [65, 59, 80, 81, 56, 95, 100],
+                        borderColor: '#0050cb',
+                        backgroundColor: 'rgba(0, 80, 203, 0.05)',
+                        fill: true,
+                        borderWidth: 3,
+                        tension: 0.4,
+                        pointBackgroundColor: '#0050cb',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: 'Projected',
+                        data: [60, 65, 75, 78, 80, 85, 90],
+                        borderColor: '#bec6e0',
+                        borderDash: [5, 5],
+                        fill: false,
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { font: { family: 'Inter', size: 12 }, color: '#727687' }
+                    },
+                    y: {
+                        grid: { color: '#eceef0' },
+                        border: { display: false },
+                        ticks: { font: { family: 'Inter', size: 12 }, color: '#727687' }
+                    }
+                }
+            }
+        });
+
+        // Doughnut Growth Chart
+        const growthCtx = document.getElementById('growthDoughnut').getContext('2d');
+        new Chart(growthCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Growth', 'Base'],
+                datasets: [{
+                    data: [75, 25],
+                    backgroundColor: ['#0050cb', '#dae2fd'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                cutout: '80%',
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // Micro-interaction for buttons
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mousedown', () => btn.classList.add('scale-95'));
+            btn.addEventListener('mouseup', () => btn.classList.remove('scale-95'));
+            btn.addEventListener('mouseleave', () => btn.classList.remove('scale-95'));
+        });
+    </script>
+</body></html>
