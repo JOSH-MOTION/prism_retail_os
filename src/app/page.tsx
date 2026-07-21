@@ -1101,7 +1101,7 @@ export default function Home() {
           
           await seedSupabaseUser(activeUserId);
           await fetchUserData(activeUserId);
-          alert("Supabase database tables successfully seeded with demo dataset!");
+          alert("Cloud database tables successfully seeded with demo dataset!");
         } catch (err) {
           console.error("Failed to reset database:", err);
         } finally {
@@ -1133,7 +1133,7 @@ export default function Home() {
     }
 
     const newProd: Product = {
-      id: `p-GH₵{Date.now()}`,
+      id: `p-${Date.now()}`,
       name: newProdName.trim(),
       category: newProdCategory,
       costPrice: cost,
@@ -1164,7 +1164,7 @@ export default function Home() {
         if (error) throw error;
         if (data) {
           await fetchUserData(activeUserId);
-          setProductAddAlert({ type: "success", msg: `Successfully added GH₵{newProd.name} to database!` });
+          setProductAddAlert({ type: "success", msg: `Successfully added ${newProd.name} to database!` });
           setNewProdName("");
           setNewProdCost("");
           setNewProdSelling("");
@@ -1172,7 +1172,7 @@ export default function Home() {
           setTimeout(() => setShowAddProductModal(false), 800);
         }
       } catch (err: any) {
-        setProductAddAlert({ type: "error", msg: `DB Error: GH₵{err.message}` });
+        setProductAddAlert({ type: "error", msg: `DB Error: ${err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1180,7 +1180,7 @@ export default function Home() {
       // Local mode
       const updatedProducts = [...products, newProd];
       saveLocalState(updatedProducts, purchases, transactions, sales, wallet);
-      setProductAddAlert({ type: "success", msg: `Successfully added GH₵{newProd.name} to local workspace!` });
+      setProductAddAlert({ type: "success", msg: `Successfully added ${newProd.name} to local workspace!` });
       setNewProdName("");
       setNewProdCost("");
       setNewProdSelling("");
@@ -1201,7 +1201,7 @@ export default function Home() {
     }
 
     const newTx: Transaction = {
-      id: `tx-GH₵{Date.now()}`,
+      id: `tx-${Date.now()}`,
       date: new Date().toISOString(),
       type: "Investment",
       description: `Injected GH₵${amount.toLocaleString()} personal startup funding capital.`,
@@ -1239,7 +1239,7 @@ export default function Home() {
         await fetchUserData(activeUserId);
         setWalletAlert({ type: "success", msg: `Successfully injected GH₵${amount.toLocaleString()} capital cash!` });
       } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
+        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1280,7 +1280,7 @@ export default function Home() {
 
           const parts = trimmedLine.split(":");
           if (parts.length < 2) {
-            throw new Error(`Format error on line: "GH₵{trimmedLine}". Expected "Color: Quantity Size, Quantity Size" or "Color: Quantity"`);
+            throw new Error(`Format error on line: "${trimmedLine}". Expected "Color: Quantity Size, Quantity Size" or "Color: Quantity"`);
           }
 
           const color = parts[0].trim();
@@ -1294,7 +1294,7 @@ export default function Home() {
             // Highly flexible regex: Matches either "10 Large" or just "8" (defaults to "One Size")
             const match = rawItem.match(/^(\d+)(?:\s+(.+))?$/);
             if (!match) {
-              throw new Error(`Failed to parse details in: "GH₵{rawItem}" inside line "GH₵{trimmedLine}". Make sure it is e.g. "2 Large" or "10"`);
+              throw new Error(`Failed to parse details in: "${rawItem}" inside line "${trimmedLine}". Make sure it is e.g. "2 Large" or "10"`);
             }
 
             const quantity = parseInt(match[1], 10);
@@ -1317,7 +1317,7 @@ export default function Home() {
         setParsedItems(list);
         setParsingAlert({
           type: "success",
-          msg: `Successfully parsed GH₵{list.reduce((acc, i) => acc + i.quantity, 0)} units across GH₵{list.length} variants!`
+          msg: `Successfully parsed ${list.reduce((acc, i) => acc + i.quantity, 0)} units across ${list.length} variants!`
         });
       } catch (err: any) {
         setParsingAlert({ type: "error", msg: err.message || "An error occurred during text parsing." });
@@ -1376,12 +1376,12 @@ export default function Home() {
     const finalAmount = bulkIsInitial ? 0 : -totalCost;
     const finalType = bulkIsInitial ? "Restock" as const : "Purchase" as const;
     const finalDesc = bulkIsInitial 
-      ? `Initial Stock Intake of GH₵{selectedProduct.name} (${totalQty} units)`
-      : `Bulk purchase Restock of GH₵{selectedProduct.name} (${totalQty} units) from GH₵{bulkSupplier}`;
+      ? `Initial Stock Intake of ${selectedProduct.name} (${totalQty} units)`
+      : `Bulk purchase Restock of ${selectedProduct.name} (${totalQty} units) from ${bulkSupplier}`;
 
     // 2. Prepare new records
     const newBatch: PurchaseBatch = {
-      id: `pur-GH₵{Date.now()}`,
+      id: `pur-${Date.now()}`,
       supplier: bulkIsInitial ? "Initial Inventory Setup" : bulkSupplier,
       date: new Date().toISOString(),
       totalQuantity: totalQty,
@@ -1396,7 +1396,7 @@ export default function Home() {
     };
 
     const newTx: Transaction = {
-      id: `tx-GH₵{Date.now()}`,
+      id: `tx-${Date.now()}`,
       date: new Date().toISOString(),
       type: finalType,
       description: finalDesc,
@@ -1457,7 +1457,7 @@ export default function Home() {
           msg: "Bulk purchase has been successfully recorded in database!"
         });
       } catch (err: any) {
-        setParsingAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
+        setParsingAlert({ type: "error", msg: `Database error: ${err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1505,7 +1505,7 @@ export default function Home() {
       return;
     }
     if (saleQtyInput > availableStock) {
-      setSaleAlert({ type: "error", msg: `Requested GH₵{saleQtyInput} units, but only GH₵{availableStock} are available in stock.` });
+      setSaleAlert({ type: "error", msg: `Requested ${saleQtyInput} units, but only ${availableStock} are available in stock.` });
       return;
     }
 
@@ -1529,7 +1529,7 @@ export default function Home() {
     );
 
     const newSaleObj: Sale = {
-      id: `sale-GH₵{Date.now()}`,
+      id: `sale-${Date.now()}`,
       date: new Date().toISOString(),
       productName: selectedProduct.name,
       color: saleColorSelect,
@@ -1544,10 +1544,10 @@ export default function Home() {
     };
 
     const newTx: Transaction = {
-      id: `tx-GH₵{Date.now()}`,
+      id: `tx-${Date.now()}`,
       date: new Date().toISOString(),
       type: "Sale",
-      description: `Sold GH₵{saleQtyInput}x GH₵{selectedProduct.name} (${saleColorSelect} - GH₵{saleSizeSelect}) to GH₵{saleCustomerName.trim() || "Walk-in Customer"}`,
+      description: `Sold ${saleQtyInput}x ${selectedProduct.name} (${saleColorSelect} - ${saleSizeSelect}) to ${saleCustomerName.trim() || "Walk-in Customer"}`,
       amount: revenue,
       status: "Completed",
       profit,
@@ -1615,10 +1615,10 @@ export default function Home() {
         await fetchUserData(activeUserId);
         setSaleAlert({
           type: "success",
-          msg: `Successfully logged sale for GH₵{saleQtyInput} unit(s). Total Profit: GH₵${profit.toFixed(2)}.`
+          msg: `Successfully logged sale for ${saleQtyInput} unit(s). Total Profit: GH₵${profit.toFixed(2)}.`
         });
       } catch (err: any) {
-        setSaleAlert({ type: "error", msg: `Database syncing error: GH₵{err.message}` });
+        setSaleAlert({ type: "error", msg: `Database syncing error: ${err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1628,7 +1628,7 @@ export default function Home() {
       saveLocalState(nextProducts, purchases, updatedTransactions, updatedSales, nextWallet);
       setSaleAlert({
         type: "success",
-        msg: `Logged sale to local cache for GH₵{saleQtyInput} unit(s). Profit: GH₵${profit.toFixed(2)}.`
+        msg: `Logged sale to local cache for ${saleQtyInput} unit(s). Profit: GH₵${profit.toFixed(2)}.`
       });
     }
 
@@ -1658,7 +1658,7 @@ export default function Home() {
     }
 
     const newTx: Transaction = {
-      id: `tx-GH₵{Date.now()}`,
+      id: `tx-${Date.now()}`,
       date: new Date().toISOString(),
       type: "Withdrawal",
       description: `Profit withdrawal to bank account (${withdrawBank || "Default Biz Account"})`,
@@ -1700,7 +1700,7 @@ export default function Home() {
         await fetchUserData(activeUserId);
         setWalletAlert({ type: "success", msg: `Successfully withdrew GH₵${amount.toLocaleString()} from profits.` });
       } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
+        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1736,7 +1736,7 @@ export default function Home() {
     }
 
     const newTx: Transaction = {
-      id: `tx-GH₵{Date.now()}`,
+      id: `tx-${Date.now()}`,
       date: new Date().toISOString(),
       type: "Profit Reinvestment",
       description: `Reinvested GH₵${amount} from profits into business capital cash.`,
@@ -1780,7 +1780,7 @@ export default function Home() {
         await fetchUserData(activeUserId);
         setWalletAlert({ type: "success", msg: `Successfully reinvested GH₵${amount.toLocaleString()} into Capital Cash.` });
       } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
+        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1879,10 +1879,10 @@ export default function Home() {
       return { x, y, value: val, label: chartData.labels[idx] };
     });
 
-    const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} GH₵{p.x} GH₵{p.y}`).join(" ");
+    const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
     const fillPath =
       points.length > 0
-        ? `${linePath} L GH₵{points[points.length - 1].x} GH₵{height - padding} L GH₵{points[0].x} GH₵{height - padding} Z`
+        ? `${linePath} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`
         : "";
 
     return { points, linePath, fillPath, maxVal, minVal };
@@ -1969,7 +1969,7 @@ export default function Home() {
                     : authView === "reset-password"
                       ? "Choose a strong password to protect your retail OS catalog."
                       : isDbConnected 
-                        ? "Connect using your Supabase cloud credentials."
+                        ? "Connect using your cloud credentials."
                         : "Running locally via browser local storage cache."}
                 </p>
               </div>
@@ -2096,7 +2096,7 @@ export default function Home() {
                 )}
 
                 {authAlert && (
-                  <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-2 border GH₵{
+                  <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-2 border ${
                     authAlert.type === "success" 
                       ? "bg-success-container/10 border-success/20 text-success" 
                       : authAlert.type === "info"
@@ -2189,110 +2189,152 @@ export default function Home() {
       {/* ==========================================
           SIDE NAV: DESKTOP
           ========================================== */}
-      <aside className="w-64 bg-surface-lowest dark:bg-[#0c101b] border-r border-outline-variant/30 flex-shrink-0 flex flex-col justify-between hidden lg:flex premium-shadow animate-fade-in">
+      <aside className="w-64 bg-surface-lowest dark:bg-[#0b0e17] border-r border-outline-variant/30 flex-shrink-0 flex flex-col justify-between hidden lg:flex premium-shadow animate-fade-in relative z-20">
         
-        {/* Top Header */}
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white premium-shadow">
-              <span className="material-symbols-outlined text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                grid_view
-              </span>
+        {/* Top Header - Workspace Dropdown Selector Style */}
+        <div className="p-4 flex flex-col gap-4">
+          <div className="flex items-center justify-between p-3 rounded-2xl border border-outline-variant/20 bg-surface-low/45 dark:bg-[#111622]/40 hover:bg-surface-low dark:hover:bg-[#111622]/70 transition-all duration-200 cursor-pointer select-none group/workspace">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-primary-hover flex items-center justify-center text-white premium-shadow-sm flex-shrink-0 group-hover/workspace:scale-[1.02] transition-transform duration-200">
+                <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  grid_view
+                </span>
+              </div>
+              <div className="overflow-hidden">
+                <h1 className="font-display font-bold text-xs leading-tight tracking-tight text-on-surface truncate">
+                  {businessName}
+                </h1>
+                <p className="text-[9px] uppercase font-bold tracking-widest text-primary font-mono mt-0.5 flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isDbConnected ? 'bg-success animate-pulse' : 'bg-warning'} inline-block`}></span>
+                  <span>{isDbConnected ? "Cloud Connected" : "Local Database"}</span>
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-display font-bold text-base leading-tight tracking-tight text-on-surface">
-                Stitch Prism
-              </h1>
-              <p className="text-[10px] uppercase font-bold tracking-widest text-outline">
-                {isDbConnected ? "Supabase Cloud" : "Local Retail OS"}
-              </p>
-            </div>
+            <span className="material-symbols-outlined text-outline text-[16px] group-hover/workspace:text-on-surface transition-colors">unfold_more</span>
           </div>
+        </div>
 
-          <div className="flex items-center gap-3 bg-surface-low/80 dark:bg-surface-low/20 p-3 rounded-2xl border border-outline-variant/30 select-none">
-            <div className="w-9 h-9 rounded-full bg-secondary-container/50 flex items-center justify-center font-bold text-primary font-display text-sm">
+        {/* Mid Navigation Links with logical groupings */}
+        <nav className="flex-1 px-3 py-2 space-y-5 overflow-y-auto">
+          {navGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <h4 className="px-3 text-[9px] font-bold uppercase tracking-widest text-outline/60">
+                {group.title}
+              </h4>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = currentTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentTab(item.id);
+                        setParsingAlert(null);
+                        setSaleAlert(null);
+                        setWalletAlert(null);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all relative group/item select-none ${
+                        isActive
+                          ? "text-primary font-bold"
+                          : "text-on-surface-variant hover:text-on-surface"
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeTabBg"
+                          className="absolute inset-0 bg-primary/8 dark:bg-primary/15 border-l-2 border-primary rounded-xl"
+                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        />
+                      )}
+                      
+                      {!isActive && (
+                        <div className="absolute left-0 w-1 h-3.5 bg-primary/40 rounded-r-md scale-y-0 group-hover/item:scale-y-100 transition-transform duration-200" />
+                      )}
+
+                      <span
+                        className={`material-symbols-outlined text-[18px] relative z-10 transition-transform duration-200 group-hover/item:scale-105 ${
+                          isActive ? "text-primary" : "text-outline group-hover/item:text-on-surface"
+                        }`}
+                        style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+                      >
+                        {item.icon}
+                      </span>
+                      <span className="relative z-10 truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/* Bottom controls & profile info */}
+        <div className="p-4 border-t border-outline-variant/20 space-y-3 bg-surface-low/10 dark:bg-[#0c101b]/20">
+          {/* User profile card */}
+          <div className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-surface-low dark:hover:bg-[#121824]/50 transition-all cursor-pointer overflow-hidden">
+            <div className="w-8 h-8 rounded-full bg-secondary-container/50 dark:bg-secondary-container/20 flex items-center justify-center font-bold text-primary font-display text-xs border border-outline-variant/20 flex-shrink-0">
               {username[0]}
             </div>
             <div className="overflow-hidden">
               <p className="text-xs font-bold text-on-surface truncate">{username}</p>
-              <p className="text-[10px] text-outline font-medium truncate">{businessName}</p>
+              <p className="text-[10px] text-outline font-medium truncate">{email}</p>
             </div>
           </div>
-        </div>
 
-        {/* Mid Navigation Links */}
-        <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = currentTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setCurrentTab(item.id);
-                  setParsingAlert(null);
-                  setSaleAlert(null);
-                  setWalletAlert(null);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all relative GH₵{
-                  isActive
-                    ? "text-primary bg-primary/10 border-l-4 border-primary"
-                    : "text-on-surface-variant hover:bg-surface-low hover:text-on-surface"
-                }`}
-              >
-                <span className={`material-symbols-outlined text-[20px] GH₵{isActive ? "text-primary" : "text-outline"}`} style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
-                  {item.icon}
-                </span>
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Bottom controls */}
-        <div className="p-4 border-t border-outline-variant/20 space-y-2">
-          
           {isDbConnected && (
-            <div className="flex items-center justify-between px-3 py-1.5 rounded-xl text-[10px] bg-success-container/10 border border-success/20 text-success mb-2 select-none">
-              <div className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse inline-block"></span>
-                <span>DB Cloud Synced</span>
+            <div className="flex items-center justify-between px-3 py-1.5 rounded-xl text-[10px] bg-success-container/5 dark:bg-emerald-950/10 border border-success/15 text-success select-none">
+              <div className="flex items-center gap-1.5 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse inline-block"></span>
+                <span>Database Synced</span>
               </div>
-              {isLoadingDB && (
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border border-success border-t-transparent"></div>
+              {isLoadingDB ? (
+                <div className="h-3 w-3 animate-spin rounded-full border border-success border-t-transparent"></div>
+              ) : (
+                <span className="material-symbols-outlined text-[12px]">cloud_done</span>
               )}
             </div>
           )}
 
           <button
             onClick={toggleTheme}
-            className="w-full flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold bg-surface-low/60 hover:bg-surface-low border border-outline-variant/30 text-on-surface transition-all"
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium bg-surface-low/50 dark:bg-[#121824]/40 hover:bg-surface-low dark:hover:bg-[#121824]/70 border border-outline-variant/10 text-on-surface transition-all select-none"
           >
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">
+            <div className="flex items-center gap-2 text-on-surface-variant font-medium">
+              <span className="material-symbols-outlined text-[18px] text-outline">
                 {darkMode ? "dark_mode" : "light_mode"}
               </span>
-              <span>{darkMode ? "Dark Theme" : "Light Theme"}</span>
+              <span>Theme Mode</span>
             </div>
-            <div className="w-8 h-4 rounded-full bg-outline-variant/50 relative flex items-center p-0.5 transition-all">
-              <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 GH₵{darkMode ? "translate-x-3.5" : "translate-x-0"}`}></div>
+            <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-300 relative flex items-center ${
+              darkMode ? "bg-primary" : "bg-outline-variant"
+            }`}>
+              <motion.div
+                layout
+                className="w-3.5 h-3.5 rounded-full bg-white shadow-sm"
+                animate={{ x: darkMode ? 14 : 0 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
             </div>
           </button>
 
-          <button
-            onClick={handleResetData}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-warning hover:bg-warning-container/20 transition-all"
-          >
-            <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-            Load Demo Data
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-error hover:bg-error-container/10 transition-all"
-          >
-            <span className="material-symbols-outlined text-[18px]">logout</span>
-            Exit Workplace
-          </button>
+          <div className="flex gap-2 pt-1 border-t border-outline-variant/10">
+            <button
+              onClick={handleResetData}
+              title="Load Seed Data"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-medium text-warning-container bg-warning-container/10 border border-warning/20 hover:bg-warning-container/20 hover:text-warning transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+              Demo Data
+            </button>
+            <button
+              onClick={handleLogout}
+              title="Exit Workplace"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-medium text-error bg-error/5 border border-error/20 hover:bg-error/15 hover:text-error-hover transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[16px]">logout</span>
+              Exit OS
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -2758,7 +2800,7 @@ export default function Home() {
                       <button
                         key={cat}
                         onClick={() => setInventoryCategory(cat)}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all GH₵{
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
                           isSelected
                             ? "bg-primary text-white"
                             : "bg-surface-low text-on-surface-variant border border-outline-variant/35 hover:bg-outline-variant/20"
@@ -2805,7 +2847,7 @@ export default function Home() {
                               </td>
                               <td className="p-4 text-outline font-medium">{prod.category}</td>
                               <td className="p-4 text-center">
-                                <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] GH₵{
+                                <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
                                   totalQty <= 3 
                                     ? "bg-error-container text-on-error-container"
                                     : totalQty <= 8 
@@ -2859,7 +2901,7 @@ export default function Home() {
                                                 <p className="text-[10px] text-outline">Size: {v.size}</p>
                                               </div>
                                               <div className="text-right">
-                                                <p className={`font-display font-bold text-xs GH₵{isLow ? "text-error" : "text-on-surface"}`}>
+                                                <p className={`font-display font-bold text-xs ${isLow ? "text-error" : "text-on-surface"}`}>
                                                   {v.quantity} available
                                                 </p>
                                                 <p className="text-[9px] text-outline">Cost: GH₵{(v.quantity * prod.costPrice).toFixed(2)}</p>
@@ -3027,7 +3069,7 @@ export default function Home() {
                   </div>
 
                   {parsingAlert && (
-                    <div className={`p-4 rounded-2xl text-xs flex items-start gap-2.5 border GH₵{
+                    <div className={`p-4 rounded-2xl text-xs flex items-start gap-2.5 border ${
                       parsingAlert.type === "success" 
                         ? "bg-success-container/10 border-success/20 text-success" 
                         : "bg-error-container/10 border-error/20 text-error"
@@ -3113,7 +3155,7 @@ export default function Home() {
 
                         <div className="flex items-center justify-between text-xs border-t border-outline-variant/25 pt-3">
                           <span className="text-outline">Capital Budget Remaining:</span>
-                          <span className={`font-bold GH₵{
+                          <span className={`font-bold ${
                             (parsedItems.reduce((acc, i) => acc + i.quantity, 0) * (products.find((p) => p.id === bulkProductSelect)?.costPrice || 0)) > wallet.capitalCash
                               ? "text-error"
                               : "text-success"
@@ -3304,7 +3346,7 @@ export default function Home() {
                     </div>
 
                     {saleAlert && (
-                      <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border GH₵{
+                      <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border ${
                         saleAlert.type === "success" 
                           ? "bg-success-container/10 border-success/20 text-success" 
                           : "bg-error-container/10 border-error/20 text-error"
@@ -3527,7 +3569,7 @@ export default function Home() {
                           setActiveReportMetric(metric.id as any);
                           setHoveredDataIndex(null);
                         }}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all GH₵{
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
                           isActive
                             ? "bg-primary text-white premium-shadow"
                             : "bg-surface-low text-on-surface-variant border border-outline-variant/25 hover:bg-outline-variant/30"
@@ -3856,7 +3898,7 @@ export default function Home() {
               </div>
 
               {walletAlert && (
-                <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border max-w-lg mx-auto GH₵{
+                <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border max-w-lg mx-auto ${
                   walletAlert.type === "success" 
                     ? "bg-success-container/10 border-success/20 text-success" 
                     : "bg-error-container/10 border-error/20 text-error"
@@ -3909,7 +3951,7 @@ export default function Home() {
                       <button
                         key={cat}
                         onClick={() => setTxFilter(cat)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all GH₵{
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
                           isSelected
                             ? "bg-primary text-white"
                             : "bg-surface-low text-on-surface-variant border border-outline-variant/35 hover:bg-outline-variant/25"
@@ -3964,7 +4006,7 @@ export default function Home() {
                               {new Date(tx.date).toLocaleString()}
                             </td>
                             <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 GH₵{typeColorClass}`}>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${typeColorClass}`}>
                                 <span className="material-symbols-outlined text-[12px]">{typeIcon}</span>
                                 {tx.type}
                               </span>
@@ -4031,115 +4073,137 @@ export default function Home() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="relative w-64 max-w-[80vw] h-full bg-surface-lowest dark:bg-[#0c101b] border-r border-outline-variant/30 flex flex-col justify-between premium-shadow-lg z-10"
+              className="relative w-64 max-w-[80vw] h-full bg-surface-lowest dark:bg-[#0b0e17] border-r border-outline-variant/30 flex flex-col justify-between premium-shadow-lg z-10"
             >
               {/* Top Section */}
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-6">
+              <div className="p-4 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white premium-shadow">
-                      <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-primary-hover flex items-center justify-center text-white premium-shadow">
+                      <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
                         grid_view
                       </span>
                     </div>
                     <div>
-                      <h2 className="font-display font-bold text-sm leading-tight text-on-surface">
-                        Stitch Prism
+                      <h2 className="font-display font-bold text-xs leading-tight text-on-surface">
+                        {businessName}
                       </h2>
                       <p className="text-[9px] uppercase font-bold tracking-widest text-outline">
-                        {isDbConnected ? "Supabase Cloud" : "Local Retail OS"}
+                        {isDbConnected ? "Cloud Connected" : "Local Database"}
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={() => setMobileMenuOpen(false)}
-                    className="p-1 text-outline hover:text-on-surface hover:bg-surface-low rounded-lg"
+                    className="p-1 text-outline hover:text-on-surface hover:bg-surface-low rounded-lg transition-colors"
                   >
-                    <span className="material-symbols-outlined text-[20px]">close</span>
+                    <span className="material-symbols-outlined text-[18px]">close</span>
                   </button>
-                </div>
-
-                <div className="flex items-center gap-2.5 bg-surface-low/80 dark:bg-surface-low/20 p-2.5 rounded-2xl border border-outline-variant/30 mb-4 select-none">
-                  <div className="w-8 h-8 rounded-full bg-secondary-container/50 flex items-center justify-center font-bold text-primary font-display text-xs">
-                    {username[0]}
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="text-xs font-bold text-on-surface truncate">{username}</p>
-                    <p className="text-[10px] text-outline font-medium truncate">{businessName}</p>
-                  </div>
                 </div>
               </div>
 
               {/* Navigation Links */}
-              <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-                {navItems.map((item) => {
-                  const isActive = currentTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentTab(item.id);
-                        setMobileMenuOpen(false);
-                        setParsingAlert(null);
-                        setSaleAlert(null);
-                        setWalletAlert(null);
-                      }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all relative GH₵{
-                        isActive
-                          ? "text-primary bg-primary/10 border-l-4 border-primary"
-                          : "text-on-surface-variant hover:bg-surface-low hover:text-on-surface"
-                      }`}
-                    >
-                      <span className={`material-symbols-outlined text-[18px] GH₵{isActive ? "text-primary" : "text-outline"}`} style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
-                        {item.icon}
-                      </span>
-                      {item.label}
-                    </button>
-                  );
-                })}
+              <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto">
+                {navGroups.map((group) => (
+                  <div key={group.title} className="space-y-0.5">
+                    <h4 className="px-3 text-[9px] font-bold uppercase tracking-widest text-outline/60">
+                      {group.title}
+                    </h4>
+                    <div className="space-y-0.5">
+                      {group.items.map((item) => {
+                        const isActive = currentTab === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setCurrentTab(item.id);
+                              setMobileMenuOpen(false);
+                              setParsingAlert(null);
+                              setSaleAlert(null);
+                              setWalletAlert(null);
+                            }}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all relative select-none ${
+                              isActive
+                                ? "text-primary font-bold bg-primary/10 border-l-2 border-primary"
+                                : "text-on-surface-variant hover:text-on-surface"
+                            }`}
+                          >
+                            <span
+                              className={`material-symbols-outlined text-[16px] ${
+                                isActive ? "text-primary" : "text-outline"
+                              }`}
+                              style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+                            >
+                              {item.icon}
+                            </span>
+                            <span className="truncate">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </nav>
 
               {/* Bottom controls */}
-              <div className="p-3 border-t border-outline-variant/20 space-y-1.5">
+              <div className="p-3 border-t border-outline-variant/20 space-y-3 bg-surface-low/10 dark:bg-[#0c101b]/20">
+                {/* User profile card */}
+                <div className="flex items-center gap-2.5 p-1 rounded-xl overflow-hidden">
+                  <div className="w-7 h-7 rounded-full bg-secondary-container/50 dark:bg-secondary-container/20 flex items-center justify-center font-bold text-primary font-display text-[10px] border border-outline-variant/20 flex-shrink-0">
+                    {username[0]}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-[11px] font-bold text-on-surface truncate">{username}</p>
+                    <p className="text-[9px] text-outline font-medium truncate">{email}</p>
+                  </div>
+                </div>
+
                 {isDbConnected && (
-                  <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[9px] bg-success-container/10 border border-success/20 text-success mb-1 select-none">
-                    <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-success animate-pulse inline-block"></span>
+                  <div className="flex items-center justify-between px-2.5 py-1 rounded-xl text-[9px] bg-success-container/5 dark:bg-emerald-950/10 border border-success/15 text-success select-none">
+                    <div className="flex items-center gap-1 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse inline-block"></span>
                       <span>Cloud Synced</span>
                     </div>
+                    <span className="material-symbols-outlined text-[10px]">cloud_done</span>
                   </div>
                 )}
 
                 <button
                   onClick={toggleTheme}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[11px] font-semibold bg-surface-low/60 hover:bg-surface-low border border-outline-variant/30 text-on-surface transition-all"
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[11px] font-medium bg-surface-low/50 dark:bg-[#121824]/40 hover:bg-surface-low dark:hover:bg-[#121824]/70 border border-outline-variant/10 text-on-surface transition-all select-none"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[16px]">
+                  <div className="flex items-center gap-2 text-on-surface-variant font-medium">
+                    <span className="material-symbols-outlined text-[16px] text-outline">
                       {darkMode ? "dark_mode" : "light_mode"}
                     </span>
                     <span>Theme</span>
                   </div>
-                  <div className="w-7 h-3.5 rounded-full bg-outline-variant/50 relative flex items-center p-0.5 transition-all">
-                    <div className={`w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-transform duration-200 GH₵{darkMode ? "translate-x-3" : "translate-x-0"}`}></div>
+                  <div className={`w-7 h-4 rounded-full p-0.5 transition-colors duration-300 relative flex items-center ${
+                    darkMode ? "bg-primary" : "bg-outline-variant"
+                  }`}>
+                    <motion.div
+                      layout
+                      className="w-3 h-3 rounded-full bg-white shadow-sm"
+                      animate={{ x: darkMode ? 12 : 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
                   </div>
                 </button>
 
-                <button
-                  onClick={handleResetData}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold text-warning hover:bg-warning-container/20 transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-                  Load Demo Data
-                </button>
-
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold text-error hover:bg-error-container/10 transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">logout</span>
-                  Exit Workplace
-                </button>
+                <div className="flex gap-2 pt-1 border-t border-outline-variant/10">
+                  <button
+                    onClick={handleResetData}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium text-warning-container bg-warning-container/10 border border-warning/20 hover:bg-warning-container/20 transition-all"
+                  >
+                    Demo Data
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium text-error bg-error/5 border border-error/20 hover:bg-error/15 transition-all"
+                  >
+                    Exit OS
+                  </button>
+                </div>
               </div>
             </motion.aside>
           </div>
@@ -4263,7 +4327,7 @@ export default function Home() {
                 </div>
 
                 {productAddAlert && (
-                  <div className={`p-3 rounded-2xl text-[11px] border GH₵{
+                  <div className={`p-3 rounded-2xl text-[11px] border ${
                     productAddAlert.type === "success" 
                       ? "bg-success-container/10 border-success/20 text-success" 
                       : "bg-error-container/10 border-error/20 text-error"
@@ -4288,13 +4352,28 @@ export default function Home() {
   );
 }
 
-const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { id: "inventory", label: "Inventory", icon: "inventory_2" },
-  { id: "bulk-purchase", label: "Bulk Purchase", icon: "add_shopping_cart" },
-  { id: "sales", label: "New Sale", icon: "payments" },
-  { id: "purchases", label: "Purchases", icon: "shopping_bag" },
-  { id: "reports", label: "Reports", icon: "analytics" },
-  { id: "wallet", label: "Wallet", icon: "account_balance_wallet" },
-  { id: "transactions", label: "Transactions", icon: "receipt_long" }
+const navGroups = [
+  {
+    title: "Overview",
+    items: [
+      { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+      { id: "reports", label: "Reports", icon: "analytics" }
+    ]
+  },
+  {
+    title: "Operations",
+    items: [
+      { id: "inventory", label: "Inventory", icon: "inventory_2" },
+      { id: "purchases", label: "Purchases", icon: "shopping_bag" },
+      { id: "transactions", label: "Transactions", icon: "receipt_long" }
+    ]
+  },
+  {
+    title: "Finance Actions",
+    items: [
+      { id: "bulk-purchase", label: "Bulk Purchase", icon: "add_shopping_cart" },
+      { id: "sales", label: "New Sale", icon: "payments" },
+      { id: "wallet", label: "Wallet", icon: "account_balance_wallet" }
+    ]
+  }
 ];
