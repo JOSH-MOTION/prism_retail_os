@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ==========================================
 // TYPES
@@ -439,6 +440,7 @@ export default function Home() {
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [inventoryCategory, setInventoryCategory] = useState("All");
   const [inventorySearch, setInventorySearch] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Bulk Purchase Page variables
   const [bulkProductSelect, setBulkProductSelect] = useState("");
@@ -1123,7 +1125,7 @@ export default function Home() {
     }
 
     const newProd: Product = {
-      id: `p-${Date.now()}`,
+      id: `p-GH₵{Date.now()}`,
       name: newProdName.trim(),
       category: newProdCategory,
       costPrice: cost,
@@ -1154,7 +1156,7 @@ export default function Home() {
         if (error) throw error;
         if (data) {
           await fetchUserData(activeUserId);
-          setProductAddAlert({ type: "success", msg: `Successfully added ${newProd.name} to database!` });
+          setProductAddAlert({ type: "success", msg: `Successfully added GH₵{newProd.name} to database!` });
           setNewProdName("");
           setNewProdCost("");
           setNewProdSelling("");
@@ -1162,7 +1164,7 @@ export default function Home() {
           setTimeout(() => setShowAddProductModal(false), 800);
         }
       } catch (err: any) {
-        setProductAddAlert({ type: "error", msg: `DB Error: ${err.message}` });
+        setProductAddAlert({ type: "error", msg: `DB Error: GH₵{err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1170,7 +1172,7 @@ export default function Home() {
       // Local mode
       const updatedProducts = [...products, newProd];
       saveLocalState(updatedProducts, purchases, transactions, sales, wallet);
-      setProductAddAlert({ type: "success", msg: `Successfully added ${newProd.name} to local workspace!` });
+      setProductAddAlert({ type: "success", msg: `Successfully added GH₵{newProd.name} to local workspace!` });
       setNewProdName("");
       setNewProdCost("");
       setNewProdSelling("");
@@ -1191,10 +1193,10 @@ export default function Home() {
     }
 
     const newTx: Transaction = {
-      id: `tx-${Date.now()}`,
+      id: `tx-GH₵{Date.now()}`,
       date: new Date().toISOString(),
       type: "Investment",
-      description: `Injected $${amount.toLocaleString()} personal startup funding capital.`,
+      description: `Injected GH₵${amount.toLocaleString()} personal startup funding capital.`,
       amount: amount,
       status: "Completed"
     };
@@ -1227,16 +1229,16 @@ export default function Home() {
         if (wErr) throw wErr;
 
         await fetchUserData(activeUserId);
-        setWalletAlert({ type: "success", msg: `Successfully injected $${amount.toLocaleString()} capital cash!` });
+        setWalletAlert({ type: "success", msg: `Successfully injected GH₵${amount.toLocaleString()} capital cash!` });
       } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+        setWalletAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
     } else {
       const updatedTransactions = [newTx, ...transactions];
       saveLocalState(products, purchases, updatedTransactions, sales, nextWallet);
-      setWalletAlert({ type: "success", msg: `Injected $${amount.toLocaleString()} capital cash (Local mode).` });
+      setWalletAlert({ type: "success", msg: `Injected GH₵${amount.toLocaleString()} capital cash (Local mode).` });
     }
 
     setInjectAmount("");
@@ -1270,7 +1272,7 @@ export default function Home() {
 
           const parts = trimmedLine.split(":");
           if (parts.length < 2) {
-            throw new Error(`Format error on line: "${trimmedLine}". Expected "Color: Quantity Size, Quantity Size" or "Color: Quantity"`);
+            throw new Error(`Format error on line: "GH₵{trimmedLine}". Expected "Color: Quantity Size, Quantity Size" or "Color: Quantity"`);
           }
 
           const color = parts[0].trim();
@@ -1284,7 +1286,7 @@ export default function Home() {
             // Highly flexible regex: Matches either "10 Large" or just "8" (defaults to "One Size")
             const match = rawItem.match(/^(\d+)(?:\s+(.+))?$/);
             if (!match) {
-              throw new Error(`Failed to parse details in: "${rawItem}" inside line "${trimmedLine}". Make sure it is e.g. "2 Large" or "10"`);
+              throw new Error(`Failed to parse details in: "GH₵{rawItem}" inside line "GH₵{trimmedLine}". Make sure it is e.g. "2 Large" or "10"`);
             }
 
             const quantity = parseInt(match[1], 10);
@@ -1307,7 +1309,7 @@ export default function Home() {
         setParsedItems(list);
         setParsingAlert({
           type: "success",
-          msg: `Successfully parsed ${list.reduce((acc, i) => acc + i.quantity, 0)} units across ${list.length} variants!`
+          msg: `Successfully parsed GH₵{list.reduce((acc, i) => acc + i.quantity, 0)} units across GH₵{list.length} variants!`
         });
       } catch (err: any) {
         setParsingAlert({ type: "error", msg: err.message || "An error occurred during text parsing." });
@@ -1366,12 +1368,12 @@ export default function Home() {
     const finalAmount = bulkIsInitial ? 0 : -totalCost;
     const finalType = bulkIsInitial ? "Restock" as const : "Purchase" as const;
     const finalDesc = bulkIsInitial 
-      ? `Initial Stock Intake of ${selectedProduct.name} (${totalQty} units)`
-      : `Bulk purchase Restock of ${selectedProduct.name} (${totalQty} units) from ${bulkSupplier}`;
+      ? `Initial Stock Intake of GH₵{selectedProduct.name} (${totalQty} units)`
+      : `Bulk purchase Restock of GH₵{selectedProduct.name} (${totalQty} units) from GH₵{bulkSupplier}`;
 
     // 2. Prepare new records
     const newBatch: PurchaseBatch = {
-      id: `pur-${Date.now()}`,
+      id: `pur-GH₵{Date.now()}`,
       supplier: bulkIsInitial ? "Initial Inventory Setup" : bulkSupplier,
       date: new Date().toISOString(),
       totalQuantity: totalQty,
@@ -1386,7 +1388,7 @@ export default function Home() {
     };
 
     const newTx: Transaction = {
-      id: `tx-${Date.now()}`,
+      id: `tx-GH₵{Date.now()}`,
       date: new Date().toISOString(),
       type: finalType,
       description: finalDesc,
@@ -1447,7 +1449,7 @@ export default function Home() {
           msg: "Bulk purchase has been successfully recorded in database!"
         });
       } catch (err: any) {
-        setParsingAlert({ type: "error", msg: `Database error: ${err.message}` });
+        setParsingAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1495,7 +1497,7 @@ export default function Home() {
       return;
     }
     if (saleQtyInput > availableStock) {
-      setSaleAlert({ type: "error", msg: `Requested ${saleQtyInput} units, but only ${availableStock} are available in stock.` });
+      setSaleAlert({ type: "error", msg: `Requested GH₵{saleQtyInput} units, but only GH₵{availableStock} are available in stock.` });
       return;
     }
 
@@ -1519,7 +1521,7 @@ export default function Home() {
     );
 
     const newSaleObj: Sale = {
-      id: `sale-${Date.now()}`,
+      id: `sale-GH₵{Date.now()}`,
       date: new Date().toISOString(),
       productName: selectedProduct.name,
       color: saleColorSelect,
@@ -1534,10 +1536,10 @@ export default function Home() {
     };
 
     const newTx: Transaction = {
-      id: `tx-${Date.now()}`,
+      id: `tx-GH₵{Date.now()}`,
       date: new Date().toISOString(),
       type: "Sale",
-      description: `Sold ${saleQtyInput}x ${selectedProduct.name} (${saleColorSelect} - ${saleSizeSelect}) to ${saleCustomerName.trim() || "Walk-in Customer"}`,
+      description: `Sold GH₵{saleQtyInput}x GH₵{selectedProduct.name} (${saleColorSelect} - GH₵{saleSizeSelect}) to GH₵{saleCustomerName.trim() || "Walk-in Customer"}`,
       amount: revenue,
       status: "Completed",
       profit,
@@ -1605,10 +1607,10 @@ export default function Home() {
         await fetchUserData(activeUserId);
         setSaleAlert({
           type: "success",
-          msg: `Successfully logged sale for ${saleQtyInput} unit(s). Total Profit: $${profit.toFixed(2)}.`
+          msg: `Successfully logged sale for GH₵{saleQtyInput} unit(s). Total Profit: GH₵${profit.toFixed(2)}.`
         });
       } catch (err: any) {
-        setSaleAlert({ type: "error", msg: `Database syncing error: ${err.message}` });
+        setSaleAlert({ type: "error", msg: `Database syncing error: GH₵{err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1618,7 +1620,7 @@ export default function Home() {
       saveLocalState(nextProducts, purchases, updatedTransactions, updatedSales, nextWallet);
       setSaleAlert({
         type: "success",
-        msg: `Logged sale to local cache for ${saleQtyInput} unit(s). Profit: $${profit.toFixed(2)}.`
+        msg: `Logged sale to local cache for GH₵{saleQtyInput} unit(s). Profit: GH₵${profit.toFixed(2)}.`
       });
     }
 
@@ -1642,13 +1644,13 @@ export default function Home() {
     if (amount > wallet.profitWallet) {
       setWalletAlert({
         type: "error",
-        msg: `Insufficient profit funds! You only have $${wallet.profitWallet.toLocaleString()} in your profit wallet.`
+        msg: `Insufficient profit funds! You only have GH₵${wallet.profitWallet.toLocaleString()} in your profit wallet.`
       });
       return;
     }
 
     const newTx: Transaction = {
-      id: `tx-${Date.now()}`,
+      id: `tx-GH₵{Date.now()}`,
       date: new Date().toISOString(),
       type: "Withdrawal",
       description: `Profit withdrawal to bank account (${withdrawBank || "Default Biz Account"})`,
@@ -1688,9 +1690,9 @@ export default function Home() {
         if (wErr) throw wErr;
 
         await fetchUserData(activeUserId);
-        setWalletAlert({ type: "success", msg: `Successfully withdrew $${amount.toLocaleString()} from profits.` });
+        setWalletAlert({ type: "success", msg: `Successfully withdrew GH₵${amount.toLocaleString()} from profits.` });
       } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+        setWalletAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1699,7 +1701,7 @@ export default function Home() {
       saveLocalState(products, purchases, updatedTransactions, sales, nextWallet);
       setWalletAlert({
         type: "success",
-        msg: `Withdrew $${amount.toLocaleString()} to bank (Local mode).`
+        msg: `Withdrew GH₵${amount.toLocaleString()} to bank (Local mode).`
       });
     }
 
@@ -1720,16 +1722,16 @@ export default function Home() {
     if (amount > wallet.profitWallet) {
       setWalletAlert({
         type: "error",
-        msg: `Insufficient profit funds! You only have $${wallet.profitWallet.toLocaleString()} in your profit wallet to reinvest.`
+        msg: `Insufficient profit funds! You only have GH₵${wallet.profitWallet.toLocaleString()} in your profit wallet to reinvest.`
       });
       return;
     }
 
     const newTx: Transaction = {
-      id: `tx-${Date.now()}`,
+      id: `tx-GH₵{Date.now()}`,
       date: new Date().toISOString(),
       type: "Profit Reinvestment",
-      description: `Reinvested $${amount} from profits into business capital cash.`,
+      description: `Reinvested GH₵${amount} from profits into business capital cash.`,
       amount: amount,
       status: "Completed"
     };
@@ -1768,9 +1770,9 @@ export default function Home() {
         if (wErr) throw wErr;
 
         await fetchUserData(activeUserId);
-        setWalletAlert({ type: "success", msg: `Successfully reinvested $${amount.toLocaleString()} into Capital Cash.` });
+        setWalletAlert({ type: "success", msg: `Successfully reinvested GH₵${amount.toLocaleString()} into Capital Cash.` });
       } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+        setWalletAlert({ type: "error", msg: `Database error: GH₵{err.message}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1779,7 +1781,7 @@ export default function Home() {
       saveLocalState(products, purchases, updatedTransactions, sales, nextWallet);
       setWalletAlert({
         type: "success",
-        msg: `Reinvested $${amount.toLocaleString()} (Local mode).`
+        msg: `Reinvested GH₵${amount.toLocaleString()} (Local mode).`
       });
     }
 
@@ -1864,10 +1866,10 @@ export default function Home() {
       return { x, y, value: val, label: chartData.labels[idx] };
     });
 
-    const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} GH₵{p.x} GH₵{p.y}`).join(" ");
     const fillPath =
       points.length > 0
-        ? `${linePath} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`
+        ? `${linePath} L GH₵{points[points.length - 1].x} GH₵{height - padding} L GH₵{points[0].x} GH₵{height - padding} Z`
         : "";
 
     return { points, linePath, fillPath, maxVal, minVal };
@@ -1891,7 +1893,12 @@ export default function Home() {
   if (!isLoggedIn) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4 bg-[#f7f9fb] dark:bg-[#090d16] text-[#191c1e] dark:text-[#f1f5f9] transition-colors duration-200">
-        <div className="w-full max-w-5xl bg-surface-lowest dark:bg-surface-lowest grid grid-cols-1 md:grid-cols-12 rounded-3xl overflow-hidden premium-shadow-lg border border-outline-variant/30">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="w-full max-w-5xl bg-surface-lowest dark:bg-surface-lowest grid grid-cols-1 md:grid-cols-12 rounded-3xl overflow-hidden premium-shadow-lg border border-outline-variant/30"
+        >
           
           {/* Left panel */}
           <div className="md:col-span-5 bg-gradient-to-br from-primary/90 to-primary p-8 md:p-12 flex flex-col justify-between text-white select-none">
@@ -2076,7 +2083,7 @@ export default function Home() {
                 )}
 
                 {authAlert && (
-                  <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-2 border ${
+                  <div className={`p-3.5 rounded-2xl text-xs flex items-start gap-2 border GH₵{
                     authAlert.type === "success" 
                       ? "bg-success-container/10 border-success/20 text-success" 
                       : authAlert.type === "info"
@@ -2158,7 +2165,7 @@ export default function Home() {
             </div>
           </div>
 
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -2213,13 +2220,13 @@ export default function Home() {
                   setSaleAlert(null);
                   setWalletAlert(null);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all relative ${
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all relative GH₵{
                   isActive
                     ? "text-primary bg-primary/10 border-l-4 border-primary"
                     : "text-on-surface-variant hover:bg-surface-low hover:text-on-surface"
                 }`}
               >
-                <span className={`material-symbols-outlined text-[20px] ${isActive ? "text-primary" : "text-outline"}`} style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                <span className={`material-symbols-outlined text-[20px] GH₵{isActive ? "text-primary" : "text-outline"}`} style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
                   {item.icon}
                 </span>
                 {item.label}
@@ -2254,7 +2261,7 @@ export default function Home() {
               <span>{darkMode ? "Dark Theme" : "Light Theme"}</span>
             </div>
             <div className="w-8 h-4 rounded-full bg-outline-variant/50 relative flex items-center p-0.5 transition-all">
-              <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${darkMode ? "translate-x-3.5" : "translate-x-0"}`}></div>
+              <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 GH₵{darkMode ? "translate-x-3.5" : "translate-x-0"}`}></div>
             </div>
           </button>
 
@@ -2284,6 +2291,12 @@ export default function Home() {
         {/* Mobile Header (Hidden on Desktop) */}
         <header className="h-16 border-b border-outline-variant/30 bg-surface-lowest dark:bg-[#0c101b] px-4 flex items-center justify-between lg:hidden flex-shrink-0">
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="w-9 h-9 rounded-xl hover:bg-surface-low border border-outline-variant/30 flex items-center justify-center text-on-surface mr-1"
+            >
+              <span className="material-symbols-outlined text-[20px]">menu</span>
+            </button>
             <span className="material-symbols-outlined text-primary text-[24px]">grid_view</span>
             <span className="font-display font-bold text-sm tracking-tight text-on-surface truncate">
               {businessName}
@@ -2316,6 +2329,15 @@ export default function Home() {
 
         {/* Scrollable Content View */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 select-text">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentTab}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+              className="w-full space-y-8 pb-10"
+            >
           
           {/* ==========================================
               TAB 1: DASHBOARD
@@ -2365,7 +2387,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none">
-                      ${dynamicBusinessWorth.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      GH₵{dynamicBusinessWorth.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-white/60 mt-1">Capital + Profit Wallet + Inventory Assets</p>
                   </div>
@@ -2379,7 +2401,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      ${dynamicInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      GH₵{dynamicInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-on-surface-variant mt-1">Total items in warehouse: {totalProductsInStock}</p>
                   </div>
@@ -2393,7 +2415,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      ${wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-on-surface-variant mt-1">Cash reserved for bulk stock manifests</p>
                   </div>
@@ -2407,7 +2429,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      ${wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      GH₵{wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-on-surface-variant mt-1">Available for withdrawals/reinvestments</p>
                   </div>
@@ -2421,7 +2443,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      ${(wallet.capitalCash + wallet.profitWallet).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      GH₵{(wallet.capitalCash + wallet.profitWallet).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-on-surface-variant mt-1">Sum of Capital Cash and Profit Wallet</p>
                   </div>
@@ -2463,7 +2485,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      ${dailyMetrics.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      GH₵{dailyMetrics.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-on-surface-variant mt-1">Gross sales completed today</p>
                   </div>
@@ -2477,7 +2499,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      ${dailyMetrics.profitToday.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      GH₵{dailyMetrics.profitToday.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </h3>
                     <p className="text-[10px] text-on-surface-variant mt-1">Real-time daily net margin earned</p>
                   </div>
@@ -2528,10 +2550,10 @@ export default function Home() {
                                 {sale.productName} <span className="text-[10px] text-outline font-normal">({sale.color} / {sale.size})</span>
                               </td>
                               <td className="py-3 text-on-surface-variant">{sale.customerName}</td>
-                              <td className="py-3 text-right font-medium text-on-surface">${sale.revenue.toFixed(2)}</td>
+                              <td className="py-3 text-right font-medium text-on-surface">GH₵{sale.revenue.toFixed(2)}</td>
                               <td className="py-3 text-right">
                                 <span className="bg-success-container/10 text-success text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                  +${sale.profit.toFixed(2)}
+                                  +GH₵{sale.profit.toFixed(2)}
                                 </span>
                               </td>
                             </tr>
@@ -2642,7 +2664,7 @@ export default function Home() {
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs font-bold text-on-surface">${pur.totalAmount.toLocaleString()}</p>
+                            <p className="text-xs font-bold text-on-surface">GH₵{pur.totalAmount.toLocaleString()}</p>
                             <p className="text-[10px] text-outline font-medium">{pur.totalQuantity} items</p>
                           </div>
                         </div>
@@ -2717,7 +2739,7 @@ export default function Home() {
                       <button
                         key={cat}
                         onClick={() => setInventoryCategory(cat)}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all GH₵{
                           isSelected
                             ? "bg-primary text-white"
                             : "bg-surface-low text-on-surface-variant border border-outline-variant/35 hover:bg-outline-variant/20"
@@ -2764,7 +2786,7 @@ export default function Home() {
                               </td>
                               <td className="p-4 text-outline font-medium">{prod.category}</td>
                               <td className="p-4 text-center">
-                                <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] GH₵{
                                   totalQty <= 3 
                                     ? "bg-error-container text-on-error-container"
                                     : totalQty <= 8 
@@ -2774,9 +2796,9 @@ export default function Home() {
                                   {totalQty} Units
                                 </span>
                               </td>
-                              <td className="p-4 text-right font-medium text-on-surface-variant">${prod.costPrice.toFixed(2)}</td>
-                              <td className="p-4 text-right font-bold text-on-surface">${prod.sellingPrice.toFixed(2)}</td>
-                              <td className="p-4 text-right font-bold text-primary">${worthVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                              <td className="p-4 text-right font-medium text-on-surface-variant">GH₵{prod.costPrice.toFixed(2)}</td>
+                              <td className="p-4 text-right font-bold text-on-surface">GH₵{prod.sellingPrice.toFixed(2)}</td>
+                              <td className="p-4 text-right font-bold text-primary">GH₵{worthVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                               <td className="p-4 text-center">
                                 <button className="p-1 rounded-full hover:bg-surface-low/80 text-outline hover:text-on-surface">
                                   <span className="material-symbols-outlined text-[20px] transition-transform duration-200" style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>
@@ -2818,10 +2840,10 @@ export default function Home() {
                                                 <p className="text-[10px] text-outline">Size: {v.size}</p>
                                               </div>
                                               <div className="text-right">
-                                                <p className={`font-display font-bold text-xs ${isLow ? "text-error" : "text-on-surface"}`}>
+                                                <p className={`font-display font-bold text-xs GH₵{isLow ? "text-error" : "text-on-surface"}`}>
                                                   {v.quantity} available
                                                 </p>
-                                                <p className="text-[9px] text-outline">Cost: ${(v.quantity * prod.costPrice).toFixed(2)}</p>
+                                                <p className="text-[9px] text-outline">Cost: GH₵{(v.quantity * prod.costPrice).toFixed(2)}</p>
                                               </div>
                                             </div>
                                           );
@@ -2924,7 +2946,7 @@ export default function Home() {
                       <option value="">-- Choose Product --</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.image} {p.name} (Cost: ${p.costPrice.toFixed(2)})
+                          {p.image} {p.name} (Cost: GH₵{p.costPrice.toFixed(2)})
                         </option>
                       ))}
                     </select>
@@ -2986,7 +3008,7 @@ export default function Home() {
                   </div>
 
                   {parsingAlert && (
-                    <div className={`p-4 rounded-2xl text-xs flex items-start gap-2.5 border ${
+                    <div className={`p-4 rounded-2xl text-xs flex items-start gap-2.5 border GH₵{
                       parsingAlert.type === "success" 
                         ? "bg-success-container/10 border-success/20 text-success" 
                         : "bg-error-container/10 border-error/20 text-error"
@@ -3046,8 +3068,8 @@ export default function Home() {
                                     <td className="py-2 font-bold">{item.color}</td>
                                     <td className="py-2 text-center">{item.size}</td>
                                     <td className="py-2 text-center font-bold text-primary">{item.quantity}</td>
-                                    <td className="py-2 text-right text-outline">${prodCost.toFixed(2)}</td>
-                                    <td className="py-2 text-right font-bold">${(item.quantity * prodCost).toFixed(2)}</td>
+                                    <td className="py-2 text-right text-outline">GH₵{prodCost.toFixed(2)}</td>
+                                    <td className="py-2 text-right font-bold">GH₵{(item.quantity * prodCost).toFixed(2)}</td>
                                   </tr>
                                 );
                               })}
@@ -3065,19 +3087,19 @@ export default function Home() {
                           <div className="text-right">
                             <p className="text-[10px] text-outline font-semibold uppercase tracking-wider">Invoice Total Amount</p>
                             <p className="text-lg font-bold text-primary">
-                              ${(parsedItems.reduce((acc, i) => acc + i.quantity, 0) * (products.find((p) => p.id === bulkProductSelect)?.costPrice || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              GH₵{(parsedItems.reduce((acc, i) => acc + i.quantity, 0) * (products.find((p) => p.id === bulkProductSelect)?.costPrice || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                             </p>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between text-xs border-t border-outline-variant/25 pt-3">
                           <span className="text-outline">Capital Budget Remaining:</span>
-                          <span className={`font-bold ${
+                          <span className={`font-bold GH₵{
                             (parsedItems.reduce((acc, i) => acc + i.quantity, 0) * (products.find((p) => p.id === bulkProductSelect)?.costPrice || 0)) > wallet.capitalCash
                               ? "text-error"
                               : "text-success"
                           }`}>
-                            ${wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
@@ -3214,7 +3236,7 @@ export default function Home() {
                       
                       <div>
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                          Selling Unit Price ($)
+                          Selling Unit Price (GH₵)
                         </label>
                         <input
                           type="number"
@@ -3263,7 +3285,7 @@ export default function Home() {
                     </div>
 
                     {saleAlert && (
-                      <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border ${
+                      <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border GH₵{
                         saleAlert.type === "success" 
                           ? "bg-success-container/10 border-success/20 text-success" 
                           : "bg-error-container/10 border-error/20 text-error"
@@ -3315,21 +3337,21 @@ export default function Home() {
                         <div className="flex items-center justify-between py-1">
                           <span className="text-outline">Gross Sales Revenue:</span>
                           <span className="font-bold text-on-surface">
-                            ${(saleQtyInput * parseFloat(salePriceInput || "0")).toFixed(2)}
+                            GH₵{(saleQtyInput * parseFloat(salePriceInput || "0")).toFixed(2)}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between py-1">
                           <span className="text-outline">Total Product Cost Price:</span>
                           <span className="font-semibold text-on-surface">
-                            ${(saleQtyInput * (selectedProductObj?.costPrice || 0)).toFixed(2)}
+                            GH₵{(saleQtyInput * (selectedProductObj?.costPrice || 0)).toFixed(2)}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between py-1 border-t border-outline-variant/20 pt-2 text-sm font-semibold">
                           <span className="text-outline">Net Income / Net Profit:</span>
                           <span className="text-success font-bold font-display">
-                            +${((saleQtyInput * parseFloat(salePriceInput || "0")) - (saleQtyInput * (selectedProductObj?.costPrice || 0))).toFixed(2)}
+                            +GH₵{((saleQtyInput * parseFloat(salePriceInput || "0")) - (saleQtyInput * (selectedProductObj?.costPrice || 0))).toFixed(2)}
                           </span>
                         </div>
 
@@ -3343,14 +3365,14 @@ export default function Home() {
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-on-surface-variant font-medium">Re-enters Capital Cash:</span>
                           <span className="font-bold text-on-surface">
-                            +${(saleQtyInput * (selectedProductObj?.costPrice || 0)).toFixed(2)}
+                            +GH₵{(saleQtyInput * (selectedProductObj?.costPrice || 0)).toFixed(2)}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-on-surface-variant font-medium">Deposits to Profit Wallet:</span>
                           <span className="font-bold text-success">
-                            +${((saleQtyInput * parseFloat(salePriceInput || "0")) - (saleQtyInput * (selectedProductObj?.costPrice || 0))).toFixed(2)}
+                            +GH₵{((saleQtyInput * parseFloat(salePriceInput || "0")) - (saleQtyInput * (selectedProductObj?.costPrice || 0))).toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -3407,7 +3429,7 @@ export default function Home() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-lg font-bold text-primary leading-tight">${batch.totalAmount.toLocaleString()}</p>
+                          <p className="text-lg font-bold text-primary leading-tight">GH₵{batch.totalAmount.toLocaleString()}</p>
                           <p className="text-xs font-semibold text-outline">{batch.totalQuantity} items received</p>
                         </div>
                       </div>
@@ -3435,8 +3457,8 @@ export default function Home() {
                                   <td className="py-2 text-center">{item.color}</td>
                                   <td className="py-2 text-center">{item.size}</td>
                                   <td className="py-2 text-center text-primary font-bold">{item.quantity}</td>
-                                  <td className="py-2 text-right">${item.costPrice.toFixed(2)}</td>
-                                  <td className="py-2 text-right text-on-surface">${(item.quantity * item.costPrice).toFixed(2)}</td>
+                                  <td className="py-2 text-right">GH₵{item.costPrice.toFixed(2)}</td>
+                                  <td className="py-2 text-right text-on-surface">GH₵{(item.quantity * item.costPrice).toFixed(2)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -3485,7 +3507,7 @@ export default function Home() {
                           setActiveReportMetric(metric.id as any);
                           setHoveredDataIndex(null);
                         }}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all GH₵{
                           isActive
                             ? "bg-primary text-white premium-shadow"
                             : "bg-surface-low text-on-surface-variant border border-outline-variant/25 hover:bg-outline-variant/30"
@@ -3569,7 +3591,7 @@ export default function Home() {
                         {svgChartPoints.points[hoveredDataIndex].label}
                       </p>
                       <p className="text-base font-bold text-primary font-display mt-0.5">
-                        ${svgChartPoints.points[hoveredDataIndex].value.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        GH₵{svgChartPoints.points[hoveredDataIndex].value.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                       </p>
                     </div>
                   )}
@@ -3653,7 +3675,7 @@ export default function Home() {
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
                   <span className="text-[10px] uppercase font-bold text-outline">Capital Cash</span>
                   <p className="text-xl font-bold font-display text-primary mt-1">
-                    ${wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-[9px] text-outline mt-1">Used to purchase inventory stock</p>
                 </div>
@@ -3661,7 +3683,7 @@ export default function Home() {
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
                   <span className="text-[10px] uppercase font-bold text-outline">Profit Wallet</span>
                   <p className="text-xl font-bold font-display text-success mt-1">
-                    ${wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    GH₵{wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-[9px] text-outline mt-1">Earned margin from sales</p>
                 </div>
@@ -3669,7 +3691,7 @@ export default function Home() {
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
                   <span className="text-[10px] uppercase font-bold text-outline">Inventory Stock Value</span>
                   <p className="text-xl font-bold font-display text-on-surface mt-1">
-                    ${dynamicInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    GH₵{dynamicInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-[9px] text-outline mt-1">Warehouse items valuation at cost</p>
                 </div>
@@ -3677,7 +3699,7 @@ export default function Home() {
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
                   <span className="text-[10px] uppercase font-bold text-outline">Business Worth</span>
                   <p className="text-xl font-bold font-display text-on-surface mt-1">
-                    ${dynamicBusinessWorth.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    GH₵{dynamicBusinessWorth.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-[9px] text-outline mt-1">Capital + Profit + Inventory worth</p>
                 </div>
@@ -3696,7 +3718,7 @@ export default function Home() {
                   <form onSubmit={handleInjectCapital} className="space-y-4">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Amount to Invest ($)
+                        Amount to Invest (GH₵)
                       </label>
                       <input
                         type="number"
@@ -3728,14 +3750,14 @@ export default function Home() {
                   <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center justify-between">
                     Withdraw Profits
                     <span className="text-xs text-outline font-bold">
-                      Paid: ${wallet.profitWithdrawn.toLocaleString()}
+                      Paid: GH₵{wallet.profitWithdrawn.toLocaleString()}
                     </span>
                   </h4>
 
                   <form onSubmit={handleWithdraw} className="space-y-4">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Amount to Withdraw ($)
+                        Amount to Withdraw (GH₵)
                       </label>
                       <input
                         type="number"
@@ -3777,14 +3799,14 @@ export default function Home() {
                   <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center justify-between">
                     Reinvest Profits
                     <span className="text-xs text-outline font-bold">
-                      Reinvested: ${wallet.profitReinvested.toLocaleString()}
+                      Reinvested: GH₵{wallet.profitReinvested.toLocaleString()}
                     </span>
                   </h4>
 
                   <form onSubmit={handleReinvest} className="space-y-4">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Amount to Reinvest ($)
+                        Amount to Reinvest (GH₵)
                       </label>
                       <input
                         type="number"
@@ -3814,7 +3836,7 @@ export default function Home() {
               </div>
 
               {walletAlert && (
-                <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border max-w-lg mx-auto ${
+                <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border max-w-lg mx-auto GH₵{
                   walletAlert.type === "success" 
                     ? "bg-success-container/10 border-success/20 text-success" 
                     : "bg-error-container/10 border-error/20 text-error"
@@ -3867,7 +3889,7 @@ export default function Home() {
                       <button
                         key={cat}
                         onClick={() => setTxFilter(cat)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all GH₵{
                           isSelected
                             ? "bg-primary text-white"
                             : "bg-surface-low text-on-surface-variant border border-outline-variant/35 hover:bg-outline-variant/25"
@@ -3922,7 +3944,7 @@ export default function Home() {
                               {new Date(tx.date).toLocaleString()}
                             </td>
                             <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${typeColorClass}`}>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 GH₵{typeColorClass}`}>
                                 <span className="material-symbols-outlined text-[12px]">{typeIcon}</span>
                                 {tx.type}
                               </span>
@@ -3930,7 +3952,7 @@ export default function Home() {
                             <td className="p-4 text-on-surface font-bold">
                               {tx.description}
                             </td>
-                            <td className={`p-4 text-right font-display font-bold text-sm ${isIncome ? "text-success" : "text-on-surface"}`}>
+                            <td className={`p-4 text-right font-display font-bold text-sm GH₵{isIncome ? "text-success" : "text-on-surface"}`}>
                               {isIncome ? "+" : ""}${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </td>
                             <td className="p-4 text-center">
@@ -3956,162 +3978,284 @@ export default function Home() {
             </div>
           )}
 
-        </main>
+        </motion.div>
+      </AnimatePresence>
+    </main>
       </div>
 
       {/* ==========================================
-          BOTTOM SHEET NAVIGATION (MOBILE)
+          MOBILE SIDEBAR (DRAWER MENU)
           ========================================== */}
-      <nav className="fixed bottom-0 left-0 right-0 h-16 bg-surface-lowest dark:bg-[#0c101b] border-t border-outline-variant/30 flex items-center justify-around lg:hidden z-40 premium-shadow">
-        {[
-          { id: "dashboard", label: "Home", icon: "dashboard" },
-          { id: "inventory", label: "Stock", icon: "inventory_2" },
-          { id: "sales", label: "Sell", icon: "payments" },
-          { id: "wallet", label: "Wallet", icon: "account_balance_wallet" },
-          { id: "transactions", label: "Ledger", icon: "receipt_long" }
-        ].map((item) => {
-          const isActive = currentTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => {
-                setCurrentTab(item.id);
-                setParsingAlert(null);
-                setSaleAlert(null);
-                setWalletAlert(null);
-              }}
-              className="flex flex-col items-center justify-center p-2 text-center"
-            >
-              <span className={`material-symbols-outlined text-[20px] ${isActive ? "text-primary" : "text-outline"}`} style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
-                {item.icon}
-              </span>
-              <span className={`text-[9px] mt-0.5 font-bold transition-all ${isActive ? "text-primary font-bold" : "text-outline"}`}>
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            />
 
-      {/* ==========================================
-          MODAL: ADD NEW PRODUCT
-          ========================================== */}
-      {showAddProductModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full rounded-3xl border border-outline-variant/40 overflow-hidden premium-shadow-lg p-6 relative">
-            <button
+            {/* Sidebar drawer content */}
+            <motion.aside
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="relative w-64 max-w-[80vw] h-full bg-surface-lowest dark:bg-[#0c101b] border-r border-outline-variant/30 flex flex-col justify-between premium-shadow-lg z-10"
+            >
+              {/* Top Section */}
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white premium-shadow">
+                      <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                        grid_view
+                      </span>
+                    </div>
+                    <div>
+                      <h2 className="font-display font-bold text-sm leading-tight text-on-surface">
+                        Stitch Prism
+                      </h2>
+                      <p className="text-[9px] uppercase font-bold tracking-widest text-outline">
+                        {isDbConnected ? "Supabase Cloud" : "Local Retail OS"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-1 text-outline hover:text-on-surface hover:bg-surface-low rounded-lg"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2.5 bg-surface-low/80 dark:bg-surface-low/20 p-2.5 rounded-2xl border border-outline-variant/30 mb-4 select-none">
+                  <div className="w-8 h-8 rounded-full bg-secondary-container/50 flex items-center justify-center font-bold text-primary font-display text-xs">
+                    {username[0]}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-xs font-bold text-on-surface truncate">{username}</p>
+                    <p className="text-[10px] text-outline font-medium truncate">{businessName}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation Links */}
+              <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
+                {navItems.map((item) => {
+                  const isActive = currentTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentTab(item.id);
+                        setMobileMenuOpen(false);
+                        setParsingAlert(null);
+                        setSaleAlert(null);
+                        setWalletAlert(null);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all relative GH₵{
+                        isActive
+                          ? "text-primary bg-primary/10 border-l-4 border-primary"
+                          : "text-on-surface-variant hover:bg-surface-low hover:text-on-surface"
+                      }`}
+                    >
+                      <span className={`material-symbols-outlined text-[18px] GH₵{isActive ? "text-primary" : "text-outline"}`} style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Bottom controls */}
+              <div className="p-3 border-t border-outline-variant/20 space-y-1.5">
+                {isDbConnected && (
+                  <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[9px] bg-success-container/10 border border-success/20 text-success mb-1 select-none">
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-success animate-pulse inline-block"></span>
+                      <span>Cloud Synced</span>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={toggleTheme}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[11px] font-semibold bg-surface-low/60 hover:bg-surface-low border border-outline-variant/30 text-on-surface transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px]">
+                      {darkMode ? "dark_mode" : "light_mode"}
+                    </span>
+                    <span>Theme</span>
+                  </div>
+                  <div className="w-7 h-3.5 rounded-full bg-outline-variant/50 relative flex items-center p-0.5 transition-all">
+                    <div className={`w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-transform duration-200 GH₵{darkMode ? "translate-x-3" : "translate-x-0"}`}></div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleResetData}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold text-warning hover:bg-warning-container/20 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                  Load Demo Data
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold text-error hover:bg-error-container/10 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[16px]">logout</span>
+                  Exit Workplace
+                </button>
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAddProductModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               onClick={() => {
                 setShowAddProductModal(false);
                 setProductAddAlert(null);
               }}
-              className="absolute top-4 right-4 text-outline hover:text-on-surface p-1 rounded-full hover:bg-surface-low"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            />
+
+            {/* Modal Dialog */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full rounded-3xl border border-outline-variant/40 overflow-hidden premium-shadow-lg p-6 relative z-10"
             >
-              <span className="material-symbols-outlined">close</span>
-            </button>
-
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-on-surface">Create New Product SKU</h3>
-              <p className="text-xs text-outline mt-0.5">Register custom products like bags, boxers, fans, or waffle shirts.</p>
-            </div>
-
-            <form onSubmit={handleAddNewProduct} className="space-y-4 text-xs font-semibold">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Product Name</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                  placeholder="Premium Boxers Pack of 3"
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Category</label>
-                  <select
-                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                    value={newProdCategory}
-                    onChange={(e) => setNewProdCategory(e.target.value)}
-                  >
-                    <option value="Clothing">👕 Clothing</option>
-                    <option value="Accessories">👜 Accessories</option>
-                    <option value="Electronics">🌀 Electronics</option>
-                    <option value="Home Goods">🥤 Home Goods</option>
-                    <option value="Other">📦 Other</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Emoji Icon</label>
-                  <select
-                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                    value={newProdImage}
-                    onChange={(e) => setNewProdImage(e.target.value)}
-                  >
-                    <option value="📦">📦 Package</option>
-                    <option value="👕">👕 Shirt</option>
-                    <option value="🩳">🩳 Boxers/Shorts</option>
-                    <option value="👜">👜 Bag</option>
-                    <option value="🌀">🌀 Fan</option>
-                    <option value="🥤">🥤 Cup/Tumbler</option>
-                    <option value="🧦">🧦 Socks</option>
-                    <option value="🕶️">🕶️ Sunglasses</option>
-                    <option value="🧢">🧢 Cap</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Cost Price ($)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                    placeholder="8.50"
-                    value={newProdCost}
-                    onChange={(e) => setNewProdCost(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Selling Price ($) (Optional)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                    placeholder="None (Set at sale)"
-                    value={newProdSelling}
-                    onChange={(e) => setNewProdSelling(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {productAddAlert && (
-                <div className={`p-3 rounded-2xl text-[11px] border ${
-                  productAddAlert.type === "success" 
-                    ? "bg-success-container/10 border-success/20 text-success" 
-                    : "bg-error-container/10 border-error/20 text-error"
-                }`}>
-                  <p>{productAddAlert.msg}</p>
-                </div>
-              )}
-
               <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all active:scale-[0.98]"
+                onClick={() => {
+                  setShowAddProductModal(false);
+                  setProductAddAlert(null);
+                }}
+                className="absolute top-4 right-4 text-outline hover:text-on-surface p-1 rounded-full hover:bg-surface-low"
               >
-                Register Product SKU
+                <span className="material-symbols-outlined">close</span>
               </button>
-            </form>
+
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-on-surface">Create New Product SKU</h3>
+                <p className="text-xs text-outline mt-0.5">Register custom products like bags, boxers, fans, or waffle shirts.</p>
+              </div>
+
+              <form onSubmit={handleAddNewProduct} className="space-y-4 text-xs font-semibold">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Product Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                    placeholder="Premium Boxers Pack of 3"
+                    value={newProdName}
+                    onChange={(e) => setNewProdName(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Category</label>
+                    <select
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      value={newProdCategory}
+                      onChange={(e) => setNewProdCategory(e.target.value)}
+                    >
+                      <option value="Clothing">👕 Clothing</option>
+                      <option value="Accessories">👜 Accessories</option>
+                      <option value="Electronics">🌀 Electronics</option>
+                      <option value="Home Goods">🥤 Home Goods</option>
+                      <option value="Other">📦 Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Emoji Icon</label>
+                    <select
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      value={newProdImage}
+                      onChange={(e) => setNewProdImage(e.target.value)}
+                    >
+                      <option value="📦">📦 Package</option>
+                      <option value="👕">👕 Shirt</option>
+                      <option value="🩳">🩳 Boxers/Shorts</option>
+                      <option value="👜">👜 Bag</option>
+                      <option value="🌀">🌀 Fan</option>
+                      <option value="🥤">🥤 Cup/Tumbler</option>
+                      <option value="🧦">🧦 Socks</option>
+                      <option value="🕶️">🕶️ Sunglasses</option>
+                      <option value="🧢">🧢 Cap</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Cost Price (GH₵)</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      placeholder="8.50"
+                      value={newProdCost}
+                      onChange={(e) => setNewProdCost(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Selling Price (GH₵) (Optional)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      placeholder="None (Set at sale)"
+                      value={newProdSelling}
+                      onChange={(e) => setNewProdSelling(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {productAddAlert && (
+                  <div className={`p-3 rounded-2xl text-[11px] border GH₵{
+                    productAddAlert.type === "success" 
+                      ? "bg-success-container/10 border-success/20 text-success" 
+                      : "bg-error-container/10 border-error/20 text-error"
+                  }`}>
+                    <p>{productAddAlert.msg}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all active:scale-[0.98]"
+                >
+                  Register Product SKU
+                </button>
+              </form>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
     </div>
   );
