@@ -474,7 +474,7 @@ export default function Home() {
 
   // Chart hover tracker state
   const [hoveredDataIndex, setHoveredDataIndex] = useState<number | null>(null);
-  const [activeReportMetric, setActiveReportMetric] = useState<"revenue" | "profit" | "inventory" | "capital">("revenue");
+  const [activeReportMetric, setActiveReportMetric] = useState<"revenue" | "profit" | "cogs" | "inventory" | "capital">("revenue");
 
   // ==========================================
   // INITIALIZATION AND SYNC
@@ -790,6 +790,14 @@ export default function Home() {
 
   const totalProductsSold = useMemo(() => {
     return sales.reduce((acc, sale) => acc + sale.quantity, 0);
+  }, [sales]);
+
+  const totalSalesCost = useMemo(() => {
+    return sales.reduce((acc, sale) => acc + (sale.cost || 0), 0);
+  }, [sales]);
+
+  const totalSalesRevenue = useMemo(() => {
+    return sales.reduce((acc, sale) => acc + (sale.revenue || 0), 0);
   }, [sales]);
 
   const dailyMetrics = useMemo(() => {
@@ -1836,6 +1844,11 @@ export default function Home() {
           const sDate = sale.date.split("T")[0];
           return sDate === dateStr ? acc + sale.profit : acc;
         }, 0);
+      } else if (activeReportMetric === "cogs") {
+        return sales.reduce((acc, sale) => {
+          const sDate = sale.date.split("T")[0];
+          return sDate === dateStr ? acc + (sale.cost || 0) : acc;
+        }, 0);
       } else if (activeReportMetric === "inventory") {
         const scaleFactors = [0.85, 0.9, 0.88, 0.95, 1.1, 1.05, 1.0];
         const dayIdx = dates.indexOf(dateStr);
@@ -2473,7 +2486,11 @@ export default function Home() {
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
                       {totalProductsSold} <span className="text-xs font-normal text-outline">units</span>
                     </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Derived from active ledger sale items</p>
+                    <div className="text-[9px] text-on-surface-variant mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 font-medium border-t border-outline-variant/20 pt-1.5">
+                      <span>Cost: <strong className="text-on-surface font-semibold">GH₵{totalSalesCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
+                      <span className="text-outline-variant/60">|</span>
+                      <span>Rev: <strong className="text-success font-semibold">GH₵{totalSalesRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
+                    </div>
                   </div>
                 </div>
 
@@ -2536,6 +2553,7 @@ export default function Home() {
                             <th className="py-2.5">Date</th>
                             <th className="py-2.5">Product</th>
                             <th className="py-2.5">Customer</th>
+                            <th className="py-2.5 text-right">Cost (COGS)</th>
                             <th className="py-2.5 text-right">Revenue</th>
                             <th className="py-2.5 text-right">Net Profit</th>
                           </tr>
@@ -2550,6 +2568,7 @@ export default function Home() {
                                 {sale.productName} <span className="text-[10px] text-outline font-normal">({sale.color} / {sale.size})</span>
                               </td>
                               <td className="py-3 text-on-surface-variant">{sale.customerName}</td>
+                              <td className="py-3 text-right font-medium text-on-surface-variant">GH₵{sale.cost.toFixed(2)}</td>
                               <td className="py-3 text-right font-medium text-on-surface">GH₵{sale.revenue.toFixed(2)}</td>
                               <td className="py-3 text-right">
                                 <span className="bg-success-container/10 text-success text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -3496,6 +3515,7 @@ export default function Home() {
                   {[
                     { id: "revenue", label: "Gross Revenue", icon: "payments" },
                     { id: "profit", label: "Net Profit", icon: "finance" },
+                    { id: "cogs", label: "Cost of Goods Sold (COGS)", icon: "shopping_bag" },
                     { id: "inventory", label: "Inventory Valuation", icon: "inventory_2" },
                     { id: "capital", label: "Capital Growth", icon: "trending_up" }
                   ].map((metric) => {
@@ -3952,8 +3972,15 @@ export default function Home() {
                             <td className="p-4 text-on-surface font-bold">
                               {tx.description}
                             </td>
-                            <td className={`p-4 text-right font-display font-bold text-sm GH₵{isIncome ? "text-success" : "text-on-surface"}`}>
-                              {isIncome ? "+" : ""}${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            <td className={`p-4 text-right font-display font-bold text-sm ${isIncome ? "text-success" : "text-on-surface"}`}>
+                              <div>
+                                {isIncome ? "+" : ""}GH₵{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </div>
+                              {tx.type === "Sale" && tx.cost !== undefined && (
+                                <div className="text-[9px] text-outline font-normal mt-0.5 font-sans">
+                                  COGS: GH₵{tx.cost.toFixed(2)} | Net: +GH₵{tx.profit?.toFixed(2)}
+                                </div>
+                              )}
                             </td>
                             <td className="p-4 text-center">
                               <span className="bg-success-container/10 text-success font-bold text-[10px] px-2 py-0.5 rounded-full">
