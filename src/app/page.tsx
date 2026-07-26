@@ -44,7 +44,7 @@ interface PurchaseBatch {
 interface Transaction {
   id: string;
   date: string;
-  type: "Investment" | "Purchase" | "Sale" | "Restock" | "Profit Reinvestment" | "Withdrawal";
+  type: "Investment" | "Purchase" | "Sale" | "Restock" | "Profit Reinvestment" | "Withdrawal" | "Adjustment";
   description: string;
   amount: number;
   status: "Completed" | "Pending";
@@ -432,6 +432,7 @@ export default function Home() {
   const [newProdSelling, setNewProdSelling] = useState("");
   const [newProdImage, setNewProdImage] = useState("📦");
   const [productAddAlert, setProductAddAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [copiedStock, setCopiedStock] = useState<string | null>(null);
 
   // Wallet Capital Injection variables
   const [injectAmount, setInjectAmount] = useState("");
@@ -466,7 +467,10 @@ export default function Home() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawBank, setWithdrawBank] = useState("");
   const [reinvestAmount, setReinvestAmount] = useState("");
-  const [walletAlert, setWalletAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [editCapitalCash, setEditCapitalCash] = useState("");
+  const [editProfitWallet, setEditProfitWallet] = useState("");
+  const [editProfitWithdrawn, setEditProfitWithdrawn] = useState("");
+  const [walletAlert, setWalletAlert] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
 
   // Transactions filters
   const [txFilter, setTxFilter] = useState("All");
@@ -1112,6 +1116,75 @@ export default function Home() {
         alert("Local storage data successfully loaded with demo dataset!");
       }
     }
+  };
+
+  // COPY STOCK LIST TO CLIPBOARD
+  const handleCopyStockList = () => {
+    // Filter products to only those with available stock
+    const availableProducts = products.map(prod => {
+      const inStockVariants = prod.variants.filter(v => v.quantity > 0);
+      return {
+        ...prod,
+        variants: inStockVariants
+      };
+    }).filter(prod => prod.variants.length > 0);
+
+    if (availableProducts.length === 0) {
+      alert("No products are currently in stock.");
+      return;
+    }
+
+    let text = `🛍️ ${businessName} - Available Stock List\n\n`;
+
+    availableProducts.forEach(prod => {
+      text += `${prod.image} ${prod.name}\n`;
+      text += `Price: GH₵${prod.sellingPrice.toFixed(2)}\n`;
+      text += `Available Options:\n`;
+      prod.variants.forEach(v => {
+        const sizeStr = v.size && v.size !== "One Size" ? ` (${v.size})` : "";
+        text += `  • ${v.color}${sizeStr}: ${v.quantity} left\n`;
+      });
+      text += `\n`;
+    });
+
+    text += `Updated on: ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}\n`;
+    text += `Thank you for choosing us! ✨`;
+
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedStock("all");
+        setTimeout(() => setCopiedStock(null), 2000);
+      })
+      .catch(err => {
+        console.error("Clipboard copy failed:", err);
+        alert("Could not copy stock list automatically. Please copy manually.");
+      });
+  };
+
+  // COPY INDIVIDUAL PRODUCT STOCK TO CLIPBOARD
+  const handleCopyProductStock = (prod: Product) => {
+    const inStockVariants = prod.variants.filter(v => v.quantity > 0);
+    if (inStockVariants.length === 0) {
+      alert(`${prod.name} is currently out of stock.`);
+      return;
+    }
+
+    let text = `${prod.image} *${prod.name}*\n`;
+    text += `Price: GH₵${prod.sellingPrice.toFixed(2)}\n`;
+    text += `Available Options:\n`;
+    inStockVariants.forEach(v => {
+      const sizeStr = v.size && v.size !== "One Size" ? ` (${v.size})` : "";
+      text += `  • ${v.color}${sizeStr}: ${v.quantity} left\n`;
+    });
+
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedStock(prod.id);
+        setTimeout(() => setCopiedStock(null), 2000);
+      })
+      .catch(err => {
+        console.error("Clipboard copy failed:", err);
+      });
   };
 
   // ADD NEW PRODUCT FUNCTION
@@ -1794,6 +1867,104 @@ export default function Home() {
     }
 
     setReinvestAmount("");
+  };
+
+  const handleAdjustBalances = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWalletAlert(null);
+
+    const newCapital = editCapitalCash.trim() !== "" ? parseFloat(editCapitalCash) : wallet.capitalCash;
+    const newProfit = editProfitWallet.trim() !== "" ? parseFloat(editProfitWallet) : wallet.profitWallet;
+    const newWithdrawn = editProfitWithdrawn.trim() !== "" ? parseFloat(editProfitWithdrawn) : wallet.profitWithdrawn;
+
+    if (isNaN(newCapital) || newCapital < 0 || isNaN(newProfit) || newProfit < 0 || isNaN(newWithdrawn) || newWithdrawn < 0) {
+      setWalletAlert({ type: "error", msg: "Please enter valid non-negative numbers for the balances." });
+      return;
+    }
+
+    const nextWallet = {
+      ...wallet,
+      capitalCash: newCapital,
+      profitWallet: newProfit,
+      profitWithdrawn: newWithdrawn
+    };
+
+    // Calculate changes to describe in the transaction ledger
+    const changes: string[] = [];
+    if (newCapital !== wallet.capitalCash) {
+      changes.push(`Capital Cash: GH₵${wallet.capitalCash.toLocaleString()} ➔ GH₵${newCapital.toLocaleString()}`);
+    }
+    if (newProfit !== wallet.profitWallet) {
+      changes.push(`Profit Wallet: GH₵${wallet.profitWallet.toLocaleString()} ➔ GH₵${newProfit.toLocaleString()}`);
+    }
+    if (newWithdrawn !== wallet.profitWithdrawn) {
+      changes.push(`Profit Withdrawn: GH₵${wallet.profitWithdrawn.toLocaleString()} ➔ GH₵${newWithdrawn.toLocaleString()}`);
+    }
+
+    if (changes.length === 0) {
+      setWalletAlert({ type: "info", msg: "No balance changes were specified." });
+      return;
+    }
+
+    const description = `Manual balance adjustment: ${changes.join(", ")}`;
+    
+    // Calculate net transaction amount just to log in transaction ledger (e.g. net change in total liquid cash)
+    const netChange = (newCapital - wallet.capitalCash) + (newProfit - wallet.profitWallet);
+
+    const newTx: Transaction = {
+      id: `tx-${Date.now()}`,
+      date: new Date().toISOString(),
+      type: "Adjustment",
+      description: description,
+      amount: netChange,
+      status: "Completed"
+    };
+
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        const { error: txErr } = await supabase
+          .from("transactions")
+          .insert([
+            {
+              user_id: activeUserId,
+              type: "Adjustment",
+              description: description,
+              amount: netChange,
+              status: "Completed"
+            }
+          ]);
+        if (txErr) throw txErr;
+
+        const { error: wErr } = await supabase
+          .from("wallets")
+          .update({
+            capital_cash: newCapital,
+            profit_wallet: newProfit,
+            profit_withdrawn: newWithdrawn
+          })
+          .eq("user_id", activeUserId);
+        if (wErr) throw wErr;
+
+        await fetchUserData(activeUserId);
+        setWalletAlert({ type: "success", msg: "Successfully updated wallet balances and recorded ledger adjustment!" });
+      } catch (err: any) {
+        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+      } finally {
+        setIsLoadingDB(false);
+      }
+    } else {
+      const updatedTransactions = [newTx, ...transactions];
+      saveLocalState(products, purchases, updatedTransactions, sales, nextWallet);
+      setWalletAlert({
+        type: "success",
+        msg: "Successfully updated wallet balances (Local mode)."
+      });
+    }
+
+    setEditCapitalCash("");
+    setEditProfitWallet("");
+    setEditProfitWithdrawn("");
   };
 
   // ==========================================
@@ -2761,6 +2932,19 @@ export default function Home() {
                 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={handleCopyStockList}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-[0.98] ${
+                      copiedStock === "all"
+                        ? "bg-success-container/20 text-success border border-success/30" 
+                        : "bg-surface-low text-on-surface border border-outline-variant hover:bg-outline-variant/20"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      {copiedStock === "all" ? "check" : "content_copy"}
+                    </span>
+                    {copiedStock === "all" ? "All Copied!" : "Copy All Stock"}
+                  </button>
+                  <button
                     onClick={() => setShowAddProductModal(true)}
                     className="px-4 py-2 rounded-xl border border-primary text-primary hover:bg-primary/5 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-[0.98]"
                   >
@@ -2914,6 +3098,19 @@ export default function Home() {
 
                                     {/* Action links */}
                                     <div className="flex items-center gap-3 mt-4 justify-end">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleCopyProductStock(prod); }}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all active:scale-[0.98] ${
+                                          copiedStock === prod.id
+                                            ? "bg-success-container/20 text-success border border-success/30"
+                                            : "border border-outline-variant/80 text-on-surface hover:bg-surface-low"
+                                        }`}
+                                      >
+                                        <span className="material-symbols-outlined text-[14px]">
+                                          {copiedStock === prod.id ? "check" : "content_copy"}
+                                        </span>
+                                        {copiedStock === prod.id ? "Copied!" : "Copy Stock Info"}
+                                      </button>
                                       <button
                                         onClick={() => {
                                           setSaleProductSelect(prod.id);
@@ -3769,7 +3966,7 @@ export default function Home() {
               </div>
 
               {/* Action columns grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 
                 {/* 1. Inject capital */}
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
@@ -3895,6 +4092,68 @@ export default function Home() {
                   </form>
                 </div>
 
+                {/* 4. Direct balance correction */}
+                <div className="bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4 animate-fade-in">
+                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2">
+                    Direct Balance Correction
+                  </h4>
+
+                  <form onSubmit={handleAdjustBalances} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+                        Capital Cash (GH₵)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        placeholder={wallet.capitalCash.toFixed(2)}
+                        value={editCapitalCash}
+                        onChange={(e) => setEditCapitalCash(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+                        Profit Wallet (GH₵)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        placeholder={wallet.profitWallet.toFixed(2)}
+                        value={editProfitWallet}
+                        onChange={(e) => setEditProfitWallet(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+                        Profits Withdrawn (GH₵)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        placeholder={wallet.profitWithdrawn.toFixed(2)}
+                        value={editProfitWithdrawn}
+                        onChange={(e) => setEditProfitWithdrawn(e.target.value)}
+                      />
+                    </div>
+
+                    <p className="text-[10px] text-on-surface-variant font-body-md leading-normal">
+                      Leave blank to keep current values. Updates manually override balances and log an <i>Adjustment</i> ledger transaction.
+                    </p>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-all active:scale-[0.98]"
+                    >
+                      Update Wallet Balances
+                    </button>
+                  </form>
+                </div>
+
               </div>
 
               {walletAlert && (
@@ -3945,7 +4204,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  {["All", "Sale", "Purchase", "Investment", "Profit Reinvestment", "Withdrawal"].map((cat) => {
+                  {["All", "Sale", "Purchase", "Investment", "Profit Reinvestment", "Withdrawal", "Adjustment"].map((cat) => {
                     const isSelected = txFilter === cat;
                     return (
                       <button
@@ -3998,6 +4257,9 @@ export default function Home() {
                         } else if (tx.type === "Investment") {
                           typeColorClass = "bg-blue-600/10 text-blue-600";
                           typeIcon = "explore";
+                        } else if (tx.type === "Adjustment") {
+                          typeColorClass = "bg-purple-600/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400";
+                          typeIcon = "tune";
                         }
 
                         return (
