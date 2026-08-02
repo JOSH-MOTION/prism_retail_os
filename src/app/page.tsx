@@ -1711,6 +1711,100 @@ export default function Home() {
     setSaleSizeSelect("");
   };
 
+  // Delete a mistakenly recorded sale — restores stock, reverses wallet balances,
+  // and removes the matching ledger entry so all totals recalculate correctly.
+  const handleDeleteSale = async (saleToDelete: Sale) => {
+    const confirmed = window.confirm(
+      `Delete this sale of ${saleToDelete.quantity}x ${saleToDelete.productName} (${saleToDelete.color} - ${saleToDelete.size})? Stock will be restored and wallet balances reversed.`
+    );
+    if (!confirmed) return;
+
+    setSaleAlert(null);
+
+    const matchedProduct = products.find((p) => p.name === saleToDelete.productName);
+    const nextProducts = matchedProduct
+      ? products.map((p) => {
+          if (p.id !== matchedProduct.id) return p;
+          const variantIndex = p.variants.findIndex(
+            (v) => v.color === saleToDelete.color && v.size === saleToDelete.size
+          );
+          if (variantIndex === -1) return p;
+          const nextVariants = [...p.variants];
+          nextVariants[variantIndex] = {
+            ...nextVariants[variantIndex],
+            quantity: nextVariants[variantIndex].quantity + saleToDelete.quantity
+          };
+          return { ...p, variants: nextVariants };
+        })
+      : products;
+
+    const nextWallet = {
+      ...wallet,
+      capitalCash: wallet.capitalCash - saleToDelete.cost,
+      profitWallet: wallet.profitWallet - saleToDelete.profit
+    };
+
+    // Best-effort match of the ledger entry created alongside this sale (no shared id exists),
+    // so the transaction history doesn't keep a phantom "Sale" line after deletion.
+    const expectedDescription = `Sold ${saleToDelete.quantity}x ${saleToDelete.productName} (${saleToDelete.color} - ${saleToDelete.size}) to ${saleToDelete.customerName}`;
+    const candidateTxs = transactions.filter(
+      (t) => t.type === "Sale" && t.description === expectedDescription && t.amount === saleToDelete.revenue
+    );
+    const matchedTx = candidateTxs.length
+      ? candidateTxs.reduce((closest, t) =>
+          Math.abs(new Date(t.date).getTime() - new Date(saleToDelete.date).getTime()) <
+          Math.abs(new Date(closest.date).getTime() - new Date(saleToDelete.date).getTime())
+            ? t
+            : closest
+        )
+      : undefined;
+
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        const { error: saleErr } = await supabase.from("sales").delete().eq("id", saleToDelete.id);
+        if (saleErr) throw saleErr;
+
+        if (matchedProduct) {
+          const updatedVariants = nextProducts.find((p) => p.id === matchedProduct.id)?.variants;
+          const { error: prodErr } = await supabase
+            .from("products")
+            .update({ variants: updatedVariants })
+            .eq("id", matchedProduct.id);
+          if (prodErr) throw prodErr;
+        }
+
+        const { error: wErr } = await supabase
+          .from("wallets")
+          .update({
+            capital_cash: nextWallet.capitalCash,
+            profit_wallet: nextWallet.profitWallet
+          })
+          .eq("user_id", activeUserId);
+        if (wErr) throw wErr;
+
+        if (matchedTx) {
+          const { error: txErr } = await supabase.from("transactions").delete().eq("id", matchedTx.id);
+          if (txErr) throw txErr;
+        }
+
+        await fetchUserData(activeUserId);
+        setSaleAlert({ type: "success", msg: "Sale deleted. Stock and wallet balances have been recalculated." });
+      } catch (err: any) {
+        setSaleAlert({ type: "error", msg: `Database syncing error: ${err.message}` });
+      } finally {
+        setIsLoadingDB(false);
+      }
+    } else {
+      const updatedSales = sales.filter((s) => s.id !== saleToDelete.id);
+      const updatedTransactions = matchedTx
+        ? transactions.filter((t) => t.id !== matchedTx.id)
+        : transactions;
+      saveLocalState(nextProducts, purchases, updatedTransactions, updatedSales, nextWallet);
+      setSaleAlert({ type: "success", msg: "Sale deleted from local cache. Stock and wallet balances have been recalculated." });
+    }
+  };
+
   // Wallet Transfers
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3647,6 +3741,67 @@ export default function Home() {
 
                 </div>
 
+              </div>
+
+              {/* Sales History */}
+              <div className="bg-surface-lowest dark:bg-surface-lowest rounded-3xl border border-outline-variant/30 premium-shadow overflow-hidden">
+                <div className="p-6 border-b border-outline-variant/30">
+                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider">
+                    Sales History
+                  </h4>
+                  <p className="text-xs text-on-surface-variant mt-1">
+                    Delete a mistakenly recorded sale to restore stock and reverse its wallet impact.
+                  </p>
+                </div>
+
+                {sales.length === 0 ? (
+                  <div className="py-16 text-center text-outline text-xs">
+                    No sales recorded yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-[10px] font-bold uppercase tracking-wider text-outline border-b border-outline-variant/30">
+                          <th className="px-6 py-3">Date</th>
+                          <th className="px-6 py-3">Product</th>
+                          <th className="px-6 py-3">Variant</th>
+                          <th className="px-6 py-3">Qty</th>
+                          <th className="px-6 py-3">Customer</th>
+                          <th className="px-6 py-3">Revenue</th>
+                          <th className="px-6 py-3">Profit</th>
+                          <th className="px-6 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sales.map((s) => (
+                          <tr key={s.id} className="border-b border-outline-variant/10 last:border-0 hover:bg-surface-low/40 transition-colors">
+                            <td className="px-6 py-3 text-on-surface-variant whitespace-nowrap">
+                              {new Date(s.date).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-3 font-semibold text-on-surface">{s.productName}</td>
+                            <td className="px-6 py-3 text-on-surface-variant">{s.color} / {s.size}</td>
+                            <td className="px-6 py-3 text-on-surface-variant">{s.quantity}</td>
+                            <td className="px-6 py-3 text-on-surface-variant">{s.customerName}</td>
+                            <td className="px-6 py-3 font-semibold text-on-surface">GH₵{s.revenue.toFixed(2)}</td>
+                            <td className="px-6 py-3 font-semibold text-success">GH₵{s.profit.toFixed(2)}</td>
+                            <td className="px-6 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSale(s)}
+                                disabled={isLoadingDB}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-error border border-error/20 hover:bg-error-container/10 text-[11px] font-semibold transition-colors disabled:opacity-40"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
             </div>
