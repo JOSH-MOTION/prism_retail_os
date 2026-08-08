@@ -44,7 +44,7 @@ interface PurchaseBatch {
 interface Transaction {
   id: string;
   date: string;
-  type: "Investment" | "Purchase" | "Sale" | "Restock" | "Profit Reinvestment" | "Withdrawal" | "Adjustment";
+  type: "Investment" | "Purchase" | "Sale" | "Restock" | "Profit Reinvestment" | "Withdrawal" | "Adjustment" | "Bank Deposit";
   description: string;
   amount: number;
   status: "Completed" | "Pending";
@@ -472,6 +472,11 @@ export default function Home() {
   const [editProfitWithdrawn, setEditProfitWithdrawn] = useState("");
   const [walletAlert, setWalletAlert] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
 
+  // Bank Profit Deposit log (record-only journal, never moves a balance)
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositNote, setDepositNote] = useState("");
+  const [depositDate, setDepositDate] = useState("");
+
   // Transactions filters
   const [txFilter, setTxFilter] = useState("All");
   const [txSearch, setTxSearch] = useState("");
@@ -486,7 +491,8 @@ export default function Home() {
 
   useEffect(() => {
     setIsMounted(true);
-    
+    setDepositDate(new Date().toISOString().split("T")[0]);
+
     // Check Dark Mode
     const cachedTheme = localStorage.getItem("sp_dark_mode");
     if (cachedTheme === "true") {
@@ -1325,6 +1331,84 @@ export default function Home() {
     setInjectAmount("");
   };
 
+  // Bank Profit Deposit — a record-only journal entry.
+  // It stamps the amount with a date so the monthly breakdown can total it up, and
+  // deliberately leaves capitalCash, profitWallet and profitWithdrawn untouched.
+  const handleRecordProfitDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWalletAlert(null);
+
+    const amount = parseFloat(depositAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setWalletAlert({ type: "error", msg: "Please enter a valid profit amount to log." });
+      return;
+    }
+
+    // Anchor the entry at midday so the stored UTC timestamp cannot slip into the
+    // neighbouring month for browsers sitting behind or ahead of UTC.
+    const entryDate = depositDate ? new Date(`${depositDate}T12:00:00`) : new Date();
+    if (isNaN(entryDate.getTime())) {
+      setWalletAlert({ type: "error", msg: "Please pick a valid deposit date." });
+      return;
+    }
+
+    const monthLabel = entryDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const description = depositNote.trim()
+      ? `Profit banked in ${monthLabel} — ${depositNote.trim()}`
+      : `Profit banked in ${monthLabel}`;
+
+    const newTx: Transaction = {
+      id: `tx-${Date.now()}`,
+      date: entryDate.toISOString(),
+      type: "Bank Deposit",
+      description: description,
+      amount: amount,
+      status: "Completed"
+    };
+
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        const { error: txErr } = await supabase
+          .from("transactions")
+          .insert([
+            {
+              user_id: activeUserId,
+              date: newTx.date,
+              type: "Bank Deposit",
+              description: description,
+              amount: amount,
+              status: "Completed"
+            }
+          ]);
+        if (txErr) throw txErr;
+
+        await fetchUserData(activeUserId);
+        setWalletAlert({
+          type: "success",
+          msg: `Logged GH₵${amount.toLocaleString()} banked profit under ${monthLabel}. No balances were changed.`
+        });
+      } catch (err: any) {
+        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+      } finally {
+        setIsLoadingDB(false);
+      }
+    } else {
+      // Re-sort because a back-dated entry must not simply sit on top of the ledger.
+      const updatedTransactions = [newTx, ...transactions].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      saveLocalState(products, purchases, updatedTransactions, sales, wallet);
+      setWalletAlert({
+        type: "success",
+        msg: `Logged GH₵${amount.toLocaleString()} banked profit under ${monthLabel} (Local mode). No balances were changed.`
+      });
+    }
+
+    setDepositAmount("");
+    setDepositNote("");
+  };
+
   // Toggle Dark Mode
   const toggleTheme = () => {
     const nextMode = !darkMode;
@@ -1421,6 +1505,26 @@ export default function Home() {
     const totalQty = parsedItems.reduce((acc, item) => acc + item.quantity, 0);
     const totalCost = totalQty * selectedProduct.costPrice;
 
+    // Funding cascade: Capital Cash pays first, and whatever it cannot cover is
+    // topped up from the Profit Wallet. Initial stock intakes are charged to nothing.
+    const chargeable = bulkIsInitial ? 0 : totalCost;
+    const fromCapital = Math.min(chargeable, wallet.capitalCash);
+    const fromProfit = Math.min(chargeable - fromCapital, wallet.profitWallet);
+    const uncovered = chargeable - fromCapital - fromProfit;
+
+    if (uncovered > 0.005) {
+      setParsingAlert({
+        type: "error",
+        msg:
+          `Not enough funds. This restock costs GH₵${chargeable.toLocaleString(undefined, { minimumFractionDigits: 2 })}, but Capital Cash ` +
+          `(GH₵${wallet.capitalCash.toLocaleString(undefined, { minimumFractionDigits: 2 })}) plus Profit Wallet ` +
+          `(GH₵${wallet.profitWallet.toLocaleString(undefined, { minimumFractionDigits: 2 })}) only covers ` +
+          `GH₵${(fromCapital + fromProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}. ` +
+          `You are short GH₵${uncovered.toLocaleString(undefined, { minimumFractionDigits: 2 })}.`
+      });
+      return;
+    }
+
     // Prepared updated product variants
     const updatedVariants = [...selectedProduct.variants];
     parsedItems.forEach((parsed) => {
@@ -1446,11 +1550,15 @@ export default function Home() {
       p.id === bulkProductSelect ? { ...p, variants: updatedVariants } : p
     );
 
-    const finalAmount = bulkIsInitial ? 0 : -totalCost;
+    const finalAmount = -chargeable;
     const finalType = bulkIsInitial ? "Restock" as const : "Purchase" as const;
-    const finalDesc = bulkIsInitial 
+    const fundingNote =
+      fromProfit > 0
+        ? ` — funded GH₵${fromCapital.toFixed(2)} from Capital Cash + GH₵${fromProfit.toFixed(2)} from Profit Wallet`
+        : "";
+    const finalDesc = bulkIsInitial
       ? `Initial Stock Intake of ${selectedProduct.name} (${totalQty} units)`
-      : `Bulk purchase Restock of ${selectedProduct.name} (${totalQty} units) from ${bulkSupplier}`;
+      : `Bulk purchase Restock of ${selectedProduct.name} (${totalQty} units) from ${bulkSupplier}${fundingNote}`;
 
     // 2. Prepare new records
     const newBatch: PurchaseBatch = {
@@ -1477,9 +1585,12 @@ export default function Home() {
       status: "Completed"
     };
 
+    // Profit spent on stock counts as profit reinvested back into the business.
     const nextWallet = {
       ...wallet,
-      capitalCash: wallet.capitalCash + finalAmount
+      capitalCash: wallet.capitalCash - fromCapital,
+      profitWallet: wallet.profitWallet - fromProfit,
+      profitReinvested: wallet.profitReinvested + fromProfit
     };
 
     // 3. Persist State
@@ -1520,14 +1631,20 @@ export default function Home() {
 
         const { error: wErr } = await supabase
           .from("wallets")
-          .update({ capital_cash: nextWallet.capitalCash })
+          .update({
+            capital_cash: nextWallet.capitalCash,
+            profit_wallet: nextWallet.profitWallet,
+            profit_reinvested: nextWallet.profitReinvested
+          })
           .eq("user_id", activeUserId);
         if (wErr) throw wErr;
 
         await fetchUserData(activeUserId);
         setParsingAlert({
           type: "success",
-          msg: "Bulk purchase has been successfully recorded in database!"
+          msg: fromProfit > 0
+            ? `Restock recorded! Charged GH₵${fromCapital.toFixed(2)} to Capital Cash and topped up GH₵${fromProfit.toFixed(2)} from your Profit Wallet.`
+            : "Bulk purchase has been successfully recorded in database!"
         });
       } catch (err: any) {
         setParsingAlert({ type: "error", msg: `Database error: ${err.message}` });
@@ -1540,7 +1657,9 @@ export default function Home() {
       saveLocalState(nextProducts, updatedPurchases, updatedTransactions, sales, nextWallet);
       setParsingAlert({
         type: "success",
-        msg: "Bulk purchase has been successfully recorded in local cache!"
+        msg: fromProfit > 0
+          ? `Restock recorded! Charged GH₵${fromCapital.toFixed(2)} to Capital Cash and topped up GH₵${fromProfit.toFixed(2)} from your Profit Wallet.`
+          : "Bulk purchase has been successfully recorded in local cache!"
       });
     }
 
@@ -2084,6 +2203,53 @@ export default function Home() {
       return matchesSearch && matchesType;
     });
   }, [transactions, txSearch, txFilter]);
+
+  // Calendar rollup of the record-only bank deposits, newest month first.
+  const depositsByMonth = useMemo(() => {
+    const buckets = new Map<string, { key: string; label: string; total: number; entries: Transaction[] }>();
+
+    transactions
+      .filter((tx) => tx.type === "Bank Deposit")
+      .forEach((tx) => {
+        const d = new Date(tx.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const bucket = buckets.get(key) || {
+          key,
+          label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+          total: 0,
+          entries: [] as Transaction[]
+        };
+        bucket.total += tx.amount;
+        bucket.entries.push(tx);
+        buckets.set(key, bucket);
+      });
+
+    return Array.from(buckets.values())
+      .map((b) => ({
+        ...b,
+        entries: b.entries.sort((a, z) => new Date(z.date).getTime() - new Date(a.date).getTime())
+      }))
+      .sort((a, b) => b.key.localeCompare(a.key));
+  }, [transactions]);
+
+  const totalProfitBanked = useMemo(
+    () => depositsByMonth.reduce((acc, m) => acc + m.total, 0),
+    [depositsByMonth]
+  );
+
+  // Live preview of how the pending restock would be paid for.
+  const bulkFunding = useMemo(() => {
+    const product = products.find((p) => p.id === bulkProductSelect);
+    const totalQty = parsedItems.reduce((acc, i) => acc + i.quantity, 0);
+    const totalCost = totalQty * (product?.costPrice || 0);
+
+    const chargeable = bulkIsInitial ? 0 : totalCost;
+    const fromCapital = Math.min(chargeable, wallet.capitalCash);
+    const fromProfit = Math.min(chargeable - fromCapital, wallet.profitWallet);
+    const uncovered = chargeable - fromCapital - fromProfit;
+
+    return { totalQty, totalCost, chargeable, fromCapital, fromProfit, uncovered, isCovered: uncovered <= 0.005 };
+  }, [products, bulkProductSelect, parsedItems, bulkIsInitial, wallet.capitalCash, wallet.profitWallet]);
 
   const chartData = useMemo(() => {
     const dates = Array.from({ length: 7 }).map((_, i) => {
@@ -3444,15 +3610,60 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-xs border-t border-outline-variant/25 pt-3">
-                          <span className="text-outline">Capital Budget Remaining:</span>
-                          <span className={`font-bold ${
-                            (parsedItems.reduce((acc, i) => acc + i.quantity, 0) * (products.find((p) => p.id === bulkProductSelect)?.costPrice || 0)) > wallet.capitalCash
-                              ? "text-error"
-                              : "text-success"
-                          }`}>
-                            GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </span>
+                        {/* Funding cascade breakdown: capital first, profit tops up the rest */}
+                        <div className="border-t border-outline-variant/25 pt-3 space-y-2">
+                          <p className="text-[10px] uppercase font-bold tracking-wider text-outline">
+                            How this restock gets paid
+                          </p>
+
+                          {bulkIsInitial ? (
+                            <p className="text-xs text-on-surface-variant font-body-md">
+                              Marked as initial stock — nothing will be deducted from Capital Cash or your Profit Wallet.
+                            </p>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-outline">
+                                  From Capital Cash
+                                  <span className="text-[10px] ml-1">
+                                    (avail. GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })})
+                                  </span>
+                                </span>
+                                <span className="font-bold text-primary">
+                                  −GH₵{bulkFunding.fromCapital.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-outline">
+                                  From Profit Wallet
+                                  <span className="text-[10px] ml-1">
+                                    (avail. GH₵{wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2 })})
+                                  </span>
+                                </span>
+                                <span className={`font-bold ${bulkFunding.fromProfit > 0 ? "text-success" : "text-outline"}`}>
+                                  −GH₵{bulkFunding.fromProfit.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+
+                              {bulkFunding.fromProfit > 0 && bulkFunding.isCovered && (
+                                <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                                  Capital Cash cannot cover the full invoice, so the remaining
+                                  {" "}GH₵{bulkFunding.fromProfit.toLocaleString("en-US", { minimumFractionDigits: 2 })}{" "}
+                                  will be taken from your Profit Wallet and counted as reinvested profit.
+                                </p>
+                              )}
+
+                              {!bulkFunding.isCovered && (
+                                <div className="flex items-center justify-between text-xs bg-error-container/10 border border-error/20 rounded-xl p-2.5">
+                                  <span className="text-error font-semibold">Short by</span>
+                                  <span className="font-bold text-error">
+                                    GH₵{bulkFunding.uncovered.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
 
                         {/* Toggle initial stock check */}
@@ -3471,10 +3682,17 @@ export default function Home() {
 
                         <button
                           onClick={handleSaveBulkPurchase}
-                          className="w-full py-3 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+                          disabled={!bulkFunding.isCovered}
+                          className="w-full py-3 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
                         >
                           <span className="material-symbols-outlined text-[18px]">add_circle</span>
-                          {bulkIsInitial ? "Record as Initial Stock" : "Approve and Restock Inventory"}
+                          {bulkIsInitial
+                            ? "Record as Initial Stock"
+                            : !bulkFunding.isCovered
+                            ? "Insufficient Capital + Profit"
+                            : bulkFunding.fromProfit > 0
+                            ? "Approve (Capital + Profit Top-up)"
+                            : "Approve and Restock Inventory"}
                         </button>
                       </div>
                     )}
@@ -4120,6 +4338,133 @@ export default function Home() {
 
               </div>
 
+              {/* Banked profit journal — record-only, grouped by month */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+                {/* Entry form */}
+                <div className="lg:col-span-5 bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
+                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px] text-blue-600">account_balance</span>
+                    Log Profit Banked
+                  </h4>
+
+                  <form onSubmit={handleRecordProfitDeposit} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+                        Amount Placed in Bank (GH₵)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0.01"
+                        step="0.01"
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        placeholder="1200.00"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+                        Date Banked
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        value={depositDate}
+                        onChange={(e) => setDepositDate(e.target.value)}
+                      />
+                      <p className="text-[9px] text-outline mt-1">Sets which month the entry is filed under.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
+                        Note (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        placeholder="Momo cash-out, Fidelity acct..."
+                        value={depositNote}
+                        onChange={(e) => setDepositNote(e.target.value)}
+                      />
+                    </div>
+
+                    <p className="text-[11px] text-on-surface-variant font-body-md leading-relaxed bg-surface-low/40 dark:bg-surface-low/10 p-3 rounded-xl border border-outline-variant/20">
+                      <strong>Record only.</strong> This just writes the figure into your ledger against the month you pick. It does <strong>not</strong> deduct from Capital Cash, and it does not change your Profit Wallet.
+                    </p>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all active:scale-[0.98]"
+                    >
+                      Record Bank Deposit
+                    </button>
+                  </form>
+                </div>
+
+                {/* Monthly calendar rollup */}
+                <div className="lg:col-span-7 bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
+                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center justify-between">
+                    Profit Banked by Month
+                    <span className="text-xs text-outline font-bold">
+                      Total: GH₵{totalProfitBanked.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </span>
+                  </h4>
+
+                  {depositsByMonth.length === 0 ? (
+                    <div className="py-12 text-center text-outline text-xs">
+                      No bank deposits logged yet. Enter an amount on the left and it will appear here under its month.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                      {depositsByMonth.map((month) => (
+                        <div
+                          key={month.key}
+                          className="rounded-2xl border border-outline-variant/25 bg-surface-low/40 dark:bg-surface-low/10 overflow-hidden"
+                        >
+                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-outline-variant/20">
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[16px] text-outline">calendar_month</span>
+                              <span className="text-xs font-bold text-on-surface">{month.label}</span>
+                              <span className="text-[9px] text-outline font-semibold">
+                                {month.entries.length} {month.entries.length === 1 ? "entry" : "entries"}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold font-display text-success">
+                              GH₵{month.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+
+                          <div className="divide-y divide-outline-variant/15">
+                            {month.entries.map((entry) => (
+                              <div key={entry.id} className="flex items-center justify-between px-4 py-2 text-xs">
+                                <div className="min-w-0">
+                                  <p className="text-on-surface font-semibold">
+                                    {new Date(entry.date).toLocaleDateString("en-US", {
+                                      weekday: "short",
+                                      month: "short",
+                                      day: "numeric"
+                                    })}
+                                  </p>
+                                  <p className="text-[10px] text-outline truncate">{entry.description}</p>
+                                </div>
+                                <span className="font-bold text-on-surface whitespace-nowrap ml-3">
+                                  GH₵{entry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
               {/* Action columns grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 
@@ -4359,7 +4704,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  {["All", "Sale", "Purchase", "Investment", "Profit Reinvestment", "Withdrawal", "Adjustment"].map((cat) => {
+                  {["All", "Sale", "Purchase", "Investment", "Profit Reinvestment", "Withdrawal", "Bank Deposit", "Adjustment"].map((cat) => {
                     const isSelected = txFilter === cat;
                     return (
                       <button
@@ -4415,6 +4760,9 @@ export default function Home() {
                         } else if (tx.type === "Adjustment") {
                           typeColorClass = "bg-purple-600/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400";
                           typeIcon = "tune";
+                        } else if (tx.type === "Bank Deposit") {
+                          typeColorClass = "bg-sky-600/10 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400";
+                          typeIcon = "account_balance";
                         }
 
                         return (
@@ -4438,6 +4786,11 @@ export default function Home() {
                               {tx.type === "Sale" && tx.cost !== undefined && (
                                 <div className="text-[9px] text-outline font-normal mt-0.5 font-sans">
                                   COGS: GH₵{tx.cost.toFixed(2)} | Net: +GH₵{tx.profit?.toFixed(2)}
+                                </div>
+                              )}
+                              {tx.type === "Bank Deposit" && (
+                                <div className="text-[9px] text-outline font-normal mt-0.5 font-sans">
+                                  Record only — no balance moved
                                 </div>
                               )}
                             </td>
