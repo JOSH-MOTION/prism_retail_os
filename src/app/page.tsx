@@ -434,6 +434,16 @@ export default function Home() {
   const [productAddAlert, setProductAddAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [copiedStock, setCopiedStock] = useState<string | null>(null);
 
+  // Edit Product Form variables
+  const [showEditProductModal, setShowEditProductModal] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editProdName, setEditProdName] = useState("");
+  const [editProdCategory, setEditProdCategory] = useState("Clothing");
+  const [editProdCost, setEditProdCost] = useState("");
+  const [editProdSelling, setEditProdSelling] = useState("");
+  const [editProdImage, setEditProdImage] = useState("📦");
+  const [productEditAlert, setProductEditAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
   // Wallet Capital Injection variables
   const [injectAmount, setInjectAmount] = useState("");
 
@@ -1266,6 +1276,136 @@ export default function Home() {
       setNewProdImage("📦");
       setTimeout(() => setShowAddProductModal(false), 800);
     }
+  };
+
+  const handleOpenEditProduct = (prod: Product) => {
+    setEditingProductId(prod.id);
+    setEditProdName(prod.name);
+    setEditProdCategory(prod.category);
+    setEditProdCost(String(prod.costPrice));
+    setEditProdSelling(prod.sellingPrice ? String(prod.sellingPrice) : "");
+    setEditProdImage(prod.image || "📦");
+    setProductEditAlert(null);
+    setShowEditProductModal(true);
+  };
+
+  const handleEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProductEditAlert(null);
+
+    const existing = products.find((p) => p.id === editingProductId);
+    if (!existing) return;
+
+    if (!editProdName.trim()) {
+      setProductEditAlert({ type: "error", msg: "Product name is required." });
+      return;
+    }
+
+    const cost = parseFloat(editProdCost);
+    const selling = editProdSelling ? parseFloat(editProdSelling) : 0;
+
+    if (isNaN(cost) || cost < 0 || isNaN(selling) || selling < 0) {
+      setProductEditAlert({ type: "error", msg: "Please enter valid numeric cost and selling prices." });
+      return;
+    }
+
+    const oldName = existing.name;
+    const newName = editProdName.trim();
+    const nameChanged = oldName !== newName;
+
+    const updatedProduct: Product = {
+      ...existing,
+      name: newName,
+      category: editProdCategory,
+      costPrice: cost,
+      sellingPrice: selling,
+      image: editProdImage || "📦"
+    };
+
+    // Keep historical sales/purchase records in sync so a rename doesn't
+    // orphan them, since Sale/PurchaseItem reference products by name, not id.
+    const nextProducts = products.map((p) => (p.id === existing.id ? updatedProduct : p));
+    const nextSales = nameChanged
+      ? sales.map((s) => (s.productName === oldName ? { ...s, productName: newName } : s))
+      : sales;
+    const nextPurchases = nameChanged
+      ? purchases.map((batch) => ({
+          ...batch,
+          items: batch.items.map((item) => (item.name === oldName ? { ...item, name: newName } : item))
+        }))
+      : purchases;
+
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        const { error: prodErr } = await supabase
+          .from("products")
+          .update({
+            name: updatedProduct.name,
+            category: updatedProduct.category,
+            cost_price: updatedProduct.costPrice,
+            selling_price: updatedProduct.sellingPrice,
+            image: updatedProduct.image
+          })
+          .eq("id", existing.id);
+        if (prodErr) throw prodErr;
+
+        if (nameChanged) {
+          const { error: saleErr } = await supabase
+            .from("sales")
+            .update({ product_name: newName })
+            .eq("user_id", activeUserId)
+            .eq("product_name", oldName);
+          if (saleErr) throw saleErr;
+
+          const affectedBatches = purchases.filter((batch) => batch.items.some((item) => item.name === oldName));
+          for (const batch of affectedBatches) {
+            const nextItems = batch.items.map((item) => (item.name === oldName ? { ...item, name: newName } : item));
+            const { error: purErr } = await supabase.from("purchases").update({ items: nextItems }).eq("id", batch.id);
+            if (purErr) throw purErr;
+          }
+        }
+
+        await fetchUserData(activeUserId);
+        setProductEditAlert({ type: "success", msg: `Successfully updated ${updatedProduct.name}.` });
+        setTimeout(() => setShowEditProductModal(false), 800);
+      } catch (err: any) {
+        setProductEditAlert({ type: "error", msg: `DB Error: ${err.message}` });
+      } finally {
+        setIsLoadingDB(false);
+      }
+    } else {
+      saveLocalState(nextProducts, nextPurchases, transactions, nextSales, wallet);
+      setProductEditAlert({ type: "success", msg: `Successfully updated ${updatedProduct.name} in local workspace.` });
+      setTimeout(() => setShowEditProductModal(false), 800);
+    }
+  };
+
+  const handleDeleteProduct = async (prod: Product) => {
+    const totalQty = prod.variants.reduce((acc, v) => acc + v.quantity, 0);
+    const confirmed = window.confirm(
+      `Delete "${prod.name}"? This removes the product and its ${totalQty} unit(s) of tracked stock from inventory everywhere. Past sales and purchase records referencing this product are kept as historical records. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const nextProducts = products.filter((p) => p.id !== prod.id);
+
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        const { error } = await supabase.from("products").delete().eq("id", prod.id);
+        if (error) throw error;
+        await fetchUserData(activeUserId);
+      } catch (err: any) {
+        window.alert(`DB Error: ${err.message}`);
+      } finally {
+        setIsLoadingDB(false);
+      }
+    } else {
+      saveLocalState(nextProducts, purchases, transactions, sales, wallet);
+    }
+
+    if (expandedProduct === prod.id) setExpandedProduct(null);
   };
 
   // INJECT STARTUP CAPITAL FUNDING
@@ -3359,6 +3499,21 @@ export default function Home() {
                                     {/* Action links */}
                                     <div className="flex items-center gap-3 mt-4 justify-end">
                                       <button
+                                        onClick={(e) => { e.stopPropagation(); handleOpenEditProduct(prod); }}
+                                        className="px-3.5 py-1.5 rounded-xl border border-outline-variant/80 text-on-surface text-xs font-semibold hover:bg-surface-low transition-all active:scale-[0.98] flex items-center gap-1"
+                                      >
+                                        <span className="material-symbols-outlined text-[14px]">edit</span>
+                                        Edit Product
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteProduct(prod); }}
+                                        disabled={isLoadingDB}
+                                        className="px-3.5 py-1.5 rounded-xl text-error border border-error/20 hover:bg-error-container/10 text-xs font-semibold flex items-center gap-1 transition-all active:scale-[0.98] disabled:opacity-40"
+                                      >
+                                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                                        Delete
+                                      </button>
+                                      <button
                                         onClick={(e) => { e.stopPropagation(); handleCopyProductStock(prod); }}
                                         className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all active:scale-[0.98] ${
                                           copiedStock === prod.id
@@ -5111,6 +5266,145 @@ export default function Home() {
                   className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all active:scale-[0.98]"
                 >
                   Register Product SKU
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showEditProductModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowEditProductModal(false);
+                setProductEditAlert(null);
+              }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            />
+
+            {/* Modal Dialog */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full rounded-3xl border border-outline-variant/40 overflow-hidden premium-shadow-lg p-6 relative z-10"
+            >
+              <button
+                onClick={() => {
+                  setShowEditProductModal(false);
+                  setProductEditAlert(null);
+                }}
+                className="absolute top-4 right-4 text-outline hover:text-on-surface p-1 rounded-full hover:bg-surface-low"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-on-surface">Edit Product SKU</h3>
+                <p className="text-xs text-outline mt-0.5">Changes apply everywhere this product appears — inventory, sales history, and purchase records.</p>
+              </div>
+
+              <form onSubmit={handleEditProduct} className="space-y-4 text-xs font-semibold">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Product Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                    placeholder="Premium Boxers Pack of 3"
+                    value={editProdName}
+                    onChange={(e) => setEditProdName(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Category</label>
+                    <select
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      value={editProdCategory}
+                      onChange={(e) => setEditProdCategory(e.target.value)}
+                    >
+                      <option value="Clothing">👕 Clothing</option>
+                      <option value="Accessories">👜 Accessories</option>
+                      <option value="Electronics">🌀 Electronics</option>
+                      <option value="Home Goods">🥤 Home Goods</option>
+                      <option value="Other">📦 Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Emoji Icon</label>
+                    <select
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      value={editProdImage}
+                      onChange={(e) => setEditProdImage(e.target.value)}
+                    >
+                      <option value="📦">📦 Package</option>
+                      <option value="👕">👕 Shirt</option>
+                      <option value="🩳">🩳 Boxers/Shorts</option>
+                      <option value="👜">👜 Bag</option>
+                      <option value="🌀">🌀 Fan</option>
+                      <option value="🥤">🥤 Cup/Tumbler</option>
+                      <option value="🧦">🧦 Socks</option>
+                      <option value="🕶️">🕶️ Sunglasses</option>
+                      <option value="🧢">🧢 Cap</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Cost Price (GH₵)</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      placeholder="8.50"
+                      value={editProdCost}
+                      onChange={(e) => setEditProdCost(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Selling Price (GH₵) (Optional)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      placeholder="None (Set at sale)"
+                      value={editProdSelling}
+                      onChange={(e) => setEditProdSelling(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {productEditAlert && (
+                  <div className={`p-3 rounded-2xl text-[11px] border ${
+                    productEditAlert.type === "success"
+                      ? "bg-success-container/10 border-success/20 text-success"
+                      : "bg-error-container/10 border-error/20 text-error"
+                  }`}>
+                    <p>{productEditAlert.msg}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoadingDB}
+                  className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-40"
+                >
+                  Save Changes
                 </button>
               </form>
             </motion.div>
