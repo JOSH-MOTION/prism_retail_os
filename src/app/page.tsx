@@ -3386,11 +3386,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Stat Card Grid — two per row on phones, three on desktop */}
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
+              {/* Stat Card Grid — two per row on phones, four on desktop; the two headline cards are double width */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
 
-                {/* Business Worth (full width on phones) */}
-                <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-primary to-primary-hover text-white p-4 md:p-5 rounded-2xl premium-shadow-lg flex flex-col justify-between gap-3 min-h-28 md:min-h-32 select-none relative overflow-hidden">
+                {/* Business Worth */}
+                <div className="col-span-2 bg-gradient-to-br from-primary to-primary-hover text-white p-4 md:p-5 rounded-2xl premium-shadow-lg flex flex-col justify-between gap-3 min-h-28 md:min-h-32 select-none relative overflow-hidden">
                   <div className="absolute right-[-10px] top-[-10px] opacity-10">
                     <span className="material-symbols-outlined text-[96px]">finance</span>
                   </div>
@@ -3405,6 +3405,32 @@ export default function Home() {
                     <p className="text-[11px] text-white/75 mt-1">Business money + Profit + Bank + Stock</p>
                   </div>
                 </div>
+
+                {/* Money You Have — cash you can use right now */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentTab("wallet")}
+                  className="col-span-2 text-left bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-4 md:p-5 rounded-2xl premium-shadow-lg flex flex-col justify-between gap-3 min-h-28 md:min-h-32 relative overflow-hidden"
+                >
+                  <div className="absolute right-[-10px] top-[-10px] opacity-10">
+                    <span className="material-symbols-outlined text-[96px]">account_balance_wallet</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-white/85 uppercase tracking-wider">Money You Have</span>
+                    <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Business + Profit</span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none">
+                      GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet)}
+                    </h3>
+                    <p className="text-[11px] text-white/85 mt-1">
+                      Business GH₵{formatMoney(wallet.capitalCash)} + Profit GH₵{formatMoney(wallet.profitWallet)}
+                    </p>
+                    <p className="text-[11px] text-white/85 mt-0.5">
+                      With bank: <strong className="text-white">GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet + bankTotals.inBank)}</strong>
+                    </p>
+                  </div>
+                </button>
 
                 {[
                   {
@@ -4840,9 +4866,30 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-primary/5 border border-primary/15 text-sm">
-                <span className="text-on-surface-variant font-semibold">Everything together (business worth)</span>
-                <span className="font-bold font-display text-on-surface">GH₵{formatMoney(dynamicBusinessWorth)}</span>
+              {/* Totals */}
+              <div className="rounded-2xl border border-emerald-600/25 bg-emerald-600/5 divide-y divide-emerald-600/15 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3.5">
+                  <div>
+                    <p className="font-bold text-on-surface flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[20px] text-emerald-600 dark:text-emerald-400">account_balance_wallet</span>
+                      Money You Have
+                    </p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Business money + Profit</p>
+                  </div>
+                  <span className="text-xl font-bold font-display text-emerald-700 dark:text-emerald-400">
+                    GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                  <span className="text-on-surface-variant font-semibold">With money in the bank</span>
+                  <span className="font-bold font-display text-on-surface">
+                    GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet + bankTotals.inBank)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                  <span className="text-on-surface-variant font-semibold">Everything together (with stock)</span>
+                  <span className="font-bold font-display text-on-surface">GH₵{formatMoney(dynamicBusinessWorth)}</span>
+                </div>
               </div>
 
               {/* Main actions */}
