@@ -490,6 +490,49 @@ const txTypeStyle = (type: Transaction["type"]): { className: string; icon: stri
   }
 };
 
+// Product icons, grouped so owners can find one by looking rather than reading.
+const PRODUCT_ICON_GROUPS: { label: string; icons: string[] }[] = [
+  { label: "Clothes", icons: ["👕", "👚", "👔", "👗", "👖", "🩳", "🩲", "🧥", "🥻", "👘", "🩱", "👙", "🧦", "🧣", "🧤"] },
+  { label: "Shoes & Hats", icons: ["👟", "👞", "👠", "👡", "🥿", "👢", "🩴", "🧢", "👒", "🎩"] },
+  { label: "Bags & Jewellery", icons: ["👜", "👛", "🎒", "💼", "🧳", "👝", "⌚", "💍", "📿", "🕶️", "👓"] },
+  { label: "Beauty & Care", icons: ["💄", "💅", "🧴", "🧼", "🪥", "🪮", "💈", "🌸", "🧽", "🪒"] },
+  { label: "Phones & Electronics", icons: ["📱", "💻", "🎧", "🔌", "🔋", "📷", "📺", "🖨️", "⌨️", "🖱️", "🌀", "💡"] },
+  { label: "Home & Kitchen", icons: ["🥤", "☕", "🍳", "🍽️", "🥣", "🫖", "🛏️", "🛋️", "🪑", "🧹", "🪣", "🕯️"] },
+  { label: "Food & Drinks", icons: ["🍞", "🍚", "🥫", "🍫", "🍬", "🧃", "🥛", "🍷", "🍺", "🥚", "🍌", "🧂"] },
+  { label: "Kids & Other", icons: ["🧸", "🍼", "🧷", "⚽", "🎁", "📚", "✏️", "🧶", "🪡", "💊", "🔧", "📦"] }
+];
+
+// Tap-to-pick grid of product icons.
+function ProductIconPicker({ value, onChange }: { value: string; onChange: (icon: string) => void }) {
+  return (
+    <div className="max-h-56 overflow-y-auto rounded-xl border border-outline-variant/50 bg-surface-low p-2 space-y-2">
+      {PRODUCT_ICON_GROUPS.map((group) => (
+        <div key={group.label}>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant px-1 mb-1">{group.label}</p>
+          <div className="grid grid-cols-6 sm:grid-cols-8 gap-1">
+            {group.icons.map((icon) => (
+              <button
+                key={icon}
+                type="button"
+                onClick={() => onChange(icon)}
+                aria-label={`Use icon ${icon}`}
+                aria-pressed={value === icon}
+                className={`h-10 rounded-lg text-2xl leading-none flex items-center justify-center transition-all ${
+                  value === icon
+                    ? "bg-primary/15 ring-2 ring-primary"
+                    : "hover:bg-surface-lowest"
+                }`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Password input with a labelled Show/Hide toggle (large tap target for phones).
 function PasswordField({
   value,
@@ -568,7 +611,6 @@ export default function Home() {
   const [newProdName, setNewProdName] = useState("");
   const [newProdCategory, setNewProdCategory] = useState("Clothing");
   const [newProdCost, setNewProdCost] = useState("");
-  const [newProdSelling, setNewProdSelling] = useState("");
   const [newProdImage, setNewProdImage] = useState("📦");
   const [productAddAlert, setProductAddAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [copiedStock, setCopiedStock] = useState<string | null>(null);
@@ -579,7 +621,6 @@ export default function Home() {
   const [editProdName, setEditProdName] = useState("");
   const [editProdCategory, setEditProdCategory] = useState("Clothing");
   const [editProdCost, setEditProdCost] = useState("");
-  const [editProdSelling, setEditProdSelling] = useState("");
   const [editProdImage, setEditProdImage] = useState("📦");
   const [productEditAlert, setProductEditAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
@@ -1042,12 +1083,12 @@ export default function Home() {
     return match ? match.quantity : 0;
   }, [selectedProductObj, saleColorSelect, saleSizeSelect]);
 
-  // Picking a product pre-fills its selling price and resets the variant fields.
+  // Picking a product resets the variant fields; the seller types the price.
   const selectSaleProduct = (productId: string) => {
     setSaleProductSelect(productId);
     const prod = products.find((p) => p.id === productId);
     if (prod) {
-      setSalePriceInput(prod.sellingPrice > 0 ? prod.sellingPrice.toString() : "");
+      setSalePriceInput("");
       setSaleColorSelect("");
       setSaleSizeSelect("");
       setSaleQtyInput(1);
@@ -1336,7 +1377,6 @@ export default function Home() {
 
     availableProducts.forEach(prod => {
       text += `${prod.image} ${prod.name}\n`;
-      text += `Price: GH₵${prod.sellingPrice.toFixed(2)}\n`;
       text += `Available Options:\n`;
       prod.variants.forEach(v => {
         const sizeStr = v.size && v.size !== "One Size" ? ` (${v.size})` : "";
@@ -1368,7 +1408,6 @@ export default function Home() {
     }
 
     let text = `${prod.image} *${prod.name}*\n`;
-    text += `Price: GH₵${prod.sellingPrice.toFixed(2)}\n`;
     text += `Available Options:\n`;
     inStockVariants.forEach(v => {
       const sizeStr = v.size && v.size !== "One Size" ? ` (${v.size})` : "";
@@ -1396,10 +1435,9 @@ export default function Home() {
     }
 
     const cost = parseFloat(newProdCost);
-    const selling = newProdSelling ? parseFloat(newProdSelling) : 0;
 
-    if (isNaN(cost) || cost < 0 || isNaN(selling) || selling < 0) {
-      setProductAddAlert({ type: "error", msg: "Please enter valid numeric cost and selling prices." });
+    if (isNaN(cost) || cost < 0) {
+      setProductAddAlert({ type: "error", msg: "Please enter a valid cost price." });
       return;
     }
 
@@ -1408,7 +1446,8 @@ export default function Home() {
       name: newProdName.trim(),
       category: newProdCategory,
       costPrice: cost,
-      sellingPrice: selling,
+      // Price is decided at each sale; the column stays for older data.
+      sellingPrice: 0,
       image: newProdImage || "📦",
       variants: []
     };
@@ -1438,7 +1477,6 @@ export default function Home() {
           setProductAddAlert({ type: "success", msg: `Successfully added ${newProd.name} to database!` });
           setNewProdName("");
           setNewProdCost("");
-          setNewProdSelling("");
           setNewProdImage("📦");
           setTimeout(() => setShowAddProductModal(false), 800);
         }
@@ -1454,7 +1492,6 @@ export default function Home() {
       setProductAddAlert({ type: "success", msg: `Successfully added ${newProd.name} to local workspace!` });
       setNewProdName("");
       setNewProdCost("");
-      setNewProdSelling("");
       setNewProdImage("📦");
       setTimeout(() => setShowAddProductModal(false), 800);
     }
@@ -1465,7 +1502,6 @@ export default function Home() {
     setEditProdName(prod.name);
     setEditProdCategory(prod.category);
     setEditProdCost(String(prod.costPrice));
-    setEditProdSelling(prod.sellingPrice ? String(prod.sellingPrice) : "");
     setEditProdImage(prod.image || "📦");
     setProductEditAlert(null);
     setShowEditProductModal(true);
@@ -1484,10 +1520,9 @@ export default function Home() {
     }
 
     const cost = parseFloat(editProdCost);
-    const selling = editProdSelling ? parseFloat(editProdSelling) : 0;
 
-    if (isNaN(cost) || cost < 0 || isNaN(selling) || selling < 0) {
-      setProductEditAlert({ type: "error", msg: "Please enter valid numeric cost and selling prices." });
+    if (isNaN(cost) || cost < 0) {
+      setProductEditAlert({ type: "error", msg: "Please enter a valid cost price." });
       return;
     }
 
@@ -1500,7 +1535,6 @@ export default function Home() {
       name: newName,
       category: editProdCategory,
       costPrice: cost,
-      sellingPrice: selling,
       image: editProdImage || "📦"
     };
 
@@ -3788,8 +3822,7 @@ export default function Home() {
                         <th className="p-3 md:p-4">Product</th>
                         <th className="hidden md:table-cell p-4">Category</th>
                         <th className="p-3 md:p-4 text-center">Stock</th>
-                        <th className="hidden md:table-cell p-4 text-right">Cost Price</th>
-                        <th className="p-3 md:p-4 text-right">Selling Price</th>
+                        <th className="p-3 md:p-4 text-right">Cost Price</th>
                         <th className="hidden md:table-cell p-4 text-right">Inventory Worth</th>
                         <th className="p-2 md:p-4 text-center"><span className="sr-only md:not-sr-only">Actions</span></th>
                       </tr>
@@ -3824,8 +3857,7 @@ export default function Home() {
                                   {totalQty} Units
                                 </span>
                               </td>
-                              <td className="hidden md:table-cell p-4 text-right font-medium text-on-surface-variant">GH₵{prod.costPrice.toFixed(2)}</td>
-                              <td className="p-3 md:p-4 text-right font-bold text-on-surface whitespace-nowrap">GH₵{prod.sellingPrice.toFixed(2)}</td>
+                              <td className="p-3 md:p-4 text-right font-bold text-on-surface whitespace-nowrap">GH₵{prod.costPrice.toFixed(2)}</td>
                               <td className="hidden md:table-cell p-4 text-right font-bold text-primary">GH₵{worthVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                               <td className="p-2 md:p-4 text-center">
                                 <button className="p-1 rounded-full hover:bg-surface-low/80 text-outline hover:text-on-surface">
@@ -4353,9 +4385,19 @@ export default function Home() {
                           step="0.01"
                           disabled={!saleProductSelect}
                           className="w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none transition-all text-on-surface disabled:opacity-50"
+                          inputMode="decimal"
+                          placeholder="Type the price"
                           value={salePriceInput}
                           onChange={(e) => setSalePriceInput(e.target.value)}
                         />
+                        {selectedProductObj && (
+                          <p className="text-[11px] text-on-surface-variant mt-1">
+                            It cost you GH₵{formatMoney(selectedProductObj.costPrice)} each
+                            {parseFloat(salePriceInput) > 0 && parseFloat(salePriceInput) < selectedProductObj.costPrice && (
+                              <strong className="text-error"> — this price is a loss!</strong>
+                            )}
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -5876,7 +5918,7 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full rounded-3xl border border-outline-variant/40 overflow-hidden premium-shadow-lg p-6 relative z-10"
+              className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full max-h-[90vh] overflow-y-auto rounded-3xl border border-outline-variant/40 premium-shadow-lg p-6 relative z-10"
             >
               <button
                 onClick={() => {
@@ -5910,7 +5952,7 @@ export default function Home() {
                   <div>
                     <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Category</label>
                     <select
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      className="w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none text-on-surface"
                       value={newProdCategory}
                       onChange={(e) => setNewProdCategory(e.target.value)}
                     >
@@ -5923,53 +5965,32 @@ export default function Home() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Emoji Icon</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                      value={newProdImage}
-                      onChange={(e) => setNewProdImage(e.target.value)}
-                    >
-                      <option value="📦">📦 Package</option>
-                      <option value="👕">👕 Shirt</option>
-                      <option value="🩳">🩳 Boxers/Shorts</option>
-                      <option value="👜">👜 Bag</option>
-                      <option value="🌀">🌀 Fan</option>
-                      <option value="🥤">🥤 Cup/Tumbler</option>
-                      <option value="🧦">🧦 Socks</option>
-                      <option value="🕶️">🕶️ Sunglasses</option>
-                      <option value="🧢">🧢 Cap</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
                     <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Cost Price (GH₵)</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       required
                       min="0"
                       step="0.01"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      className="w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none text-on-surface"
                       placeholder="8.50"
                       value={newProdCost}
                       onChange={(e) => setNewProdCost(e.target.value)}
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Selling Price (GH₵) (Optional)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                      placeholder="None (Set at sale)"
-                      value={newProdSelling}
-                      onChange={(e) => setNewProdSelling(e.target.value)}
-                    />
-                  </div>
                 </div>
+
+                <div>
+                  <label className="flex items-center justify-between text-[10px] uppercase tracking-wider text-outline mb-1">
+                    <span>Pick an Icon</span>
+                    <span className="text-2xl normal-case tracking-normal" aria-hidden="true">{newProdImage}</span>
+                  </label>
+                  <ProductIconPicker value={newProdImage} onChange={setNewProdImage} />
+                </div>
+
+                <p className="text-[11px] text-on-surface-variant font-normal">
+                  No selling price here. You type the price each time you make a sale.
+                </p>
 
                 {productAddAlert && (
                   <div className={`p-3 rounded-2xl text-[11px] border ${
@@ -6014,7 +6035,7 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full rounded-3xl border border-outline-variant/40 overflow-hidden premium-shadow-lg p-6 relative z-10"
+              className="bg-surface-lowest dark:bg-surface-lowest max-w-md w-full max-h-[90vh] overflow-y-auto rounded-3xl border border-outline-variant/40 premium-shadow-lg p-6 relative z-10"
             >
               <button
                 onClick={() => {
@@ -6048,7 +6069,7 @@ export default function Home() {
                   <div>
                     <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Category</label>
                     <select
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      className="w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none text-on-surface"
                       value={editProdCategory}
                       onChange={(e) => setEditProdCategory(e.target.value)}
                     >
@@ -6061,53 +6082,32 @@ export default function Home() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Emoji Icon</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                      value={editProdImage}
-                      onChange={(e) => setEditProdImage(e.target.value)}
-                    >
-                      <option value="📦">📦 Package</option>
-                      <option value="👕">👕 Shirt</option>
-                      <option value="🩳">🩳 Boxers/Shorts</option>
-                      <option value="👜">👜 Bag</option>
-                      <option value="🌀">🌀 Fan</option>
-                      <option value="🥤">🥤 Cup/Tumbler</option>
-                      <option value="🧦">🧦 Socks</option>
-                      <option value="🕶️">🕶️ Sunglasses</option>
-                      <option value="🧢">🧢 Cap</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
                     <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Cost Price (GH₵)</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       required
                       min="0"
                       step="0.01"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                      className="w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none text-on-surface"
                       placeholder="8.50"
                       value={editProdCost}
                       onChange={(e) => setEditProdCost(e.target.value)}
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-outline mb-1">Selling Price (GH₵) (Optional)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                      placeholder="None (Set at sale)"
-                      value={editProdSelling}
-                      onChange={(e) => setEditProdSelling(e.target.value)}
-                    />
-                  </div>
                 </div>
+
+                <div>
+                  <label className="flex items-center justify-between text-[10px] uppercase tracking-wider text-outline mb-1">
+                    <span>Pick an Icon</span>
+                    <span className="text-2xl normal-case tracking-normal" aria-hidden="true">{editProdImage}</span>
+                  </label>
+                  <ProductIconPicker value={editProdImage} onChange={setEditProdImage} />
+                </div>
+
+                <p className="text-[11px] text-on-surface-variant font-normal">
+                  No selling price here. You type the price each time you make a sale.
+                </p>
 
                 {productEditAlert && (
                   <div className={`p-3 rounded-2xl text-[11px] border ${
