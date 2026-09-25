@@ -3426,9 +3426,6 @@ export default function Home() {
                     <p className="text-[11px] text-white/85 mt-1">
                       Business GH₵{formatMoney(wallet.capitalCash)} + Profit GH₵{formatMoney(wallet.profitWallet)}
                     </p>
-                    <p className="text-[11px] text-white/85 mt-0.5">
-                      With bank: <strong className="text-white">GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet + bankTotals.inBank)}</strong>
-                    </p>
                   </div>
                 </button>
 
@@ -4874,16 +4871,10 @@ export default function Home() {
                       <span className="material-symbols-outlined text-[20px] text-emerald-600 dark:text-emerald-400">account_balance_wallet</span>
                       Money You Have
                     </p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">Business money + Profit</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Cash with you: Business money + Profit</p>
                   </div>
                   <span className="text-xl font-bold font-display text-emerald-700 dark:text-emerald-400">
                     GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet)}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
-                  <span className="text-on-surface-variant font-semibold">With money in the bank</span>
-                  <span className="font-bold font-display text-on-surface">
-                    GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet + bankTotals.inBank)}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
