@@ -677,6 +677,25 @@ export default function Home() {
   const [depositNote, setDepositNote] = useState("");
   const [depositDate, setDepositDate] = useState(() => new Date().toISOString().split("T")[0]);
 
+  // Restock List: minimum to keep of each color/size, and items ticked off at
+  // the market. Both are per-device conveniences kept in localStorage.
+  const [restockMin, setRestockMin] = useState(() => {
+    if (typeof window === "undefined") return 2;
+    const saved = parseInt(localStorage.getItem("sp_restock_min") || "", 10);
+    return saved > 0 ? saved : 2;
+  });
+  const [restockBought, setRestockBought] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem("sp_restock_bought") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [restockCopied, setRestockCopied] = useState(false);
+  // "Now" for the 30-day sales window, taken when the app loads (render must stay pure).
+  const [restockOpenedAt] = useState(() => Date.now());
+
   // Transactions filters
   const [txFilter, setTxFilter] = useState("All");
   const [txSearch, setTxSearch] = useState("");
@@ -2768,6 +2787,127 @@ export default function Home() {
   };
 
   // ==========================================
+  // RESTOCK LIST
+  // ==========================================
+
+  // Every color/size below the minimum, grouped by product, with how many
+  // sold in the last 30 days so fast sellers stand out.
+  const restockList = useMemo(() => {
+    const since = restockOpenedAt - 30 * 24 * 60 * 60 * 1000;
+    const soldRecently = new Map<string, number>();
+    sales.forEach((sale) => {
+      if (new Date(sale.date).getTime() < since) return;
+      const key = `${sale.productName}|${sale.color}|${sale.size}`;
+      soldRecently.set(key, (soldRecently.get(key) || 0) + sale.quantity);
+    });
+
+    return products
+      .map((prod) => {
+        const items = prod.variants
+          .filter((v) => v.quantity < restockMin)
+          .map((v) => {
+            const toBuy = restockMin - v.quantity;
+            return {
+              key: `${prod.id}|${v.color}|${v.size}`,
+              color: v.color,
+              size: v.size,
+              have: v.quantity,
+              toBuy,
+              cost: toBuy * prod.costPrice,
+              soldLast30: soldRecently.get(`${prod.name}|${v.color}|${v.size}`) || 0
+            };
+          })
+          .sort((a, b) => a.have - b.have || b.soldLast30 - a.soldLast30);
+        return {
+          product: prod,
+          items,
+          noStockYet: prod.variants.length === 0,
+          units: items.reduce((acc, i) => acc + i.toBuy, 0),
+          cost: items.reduce((acc, i) => acc + i.cost, 0)
+        };
+      })
+      .filter((group) => group.items.length > 0 || group.noStockYet)
+      .sort((a, b) => b.units - a.units);
+  }, [products, sales, restockMin, restockOpenedAt]);
+
+  const restockTotals = useMemo(() => {
+    let units = 0;
+    let cost = 0;
+    let boughtCost = 0;
+    restockList.forEach((group) =>
+      group.items.forEach((item) => {
+        units += item.toBuy;
+        cost += item.cost;
+        if (restockBought.includes(item.key)) boughtCost += item.cost;
+      })
+    );
+    return { units, cost, boughtCost };
+  }, [restockList, restockBought]);
+
+  const changeRestockMin = (value: number) => {
+    const next = Math.min(Math.max(value, 1), 50);
+    setRestockMin(next);
+    try {
+      localStorage.setItem("sp_restock_min", String(next));
+    } catch {
+      /* storage unavailable: keep the in-memory value */
+    }
+  };
+
+  const toggleRestockBought = (key: string) => {
+    const next = restockBought.includes(key) ? restockBought.filter((k) => k !== key) : [...restockBought, key];
+    setRestockBought(next);
+    try {
+      localStorage.setItem("sp_restock_bought", JSON.stringify(next));
+    } catch {
+      /* storage unavailable: ticks last until reload */
+    }
+  };
+
+  const clearRestockBought = () => {
+    setRestockBought([]);
+    try {
+      localStorage.removeItem("sp_restock_bought");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const buildRestockText = () => {
+    let text = `🛒 ${businessName} — Restock List\n`;
+    text += `Keep at least ${restockMin} of each\n\n`;
+    restockList.forEach((group) => {
+      const prod = group.product;
+      text += `${prod.image} *${prod.name}* — cost GH₵${formatMoney(prod.costPrice)} each\n`;
+      if (group.noStockYet) {
+        text += `  • No stock recorded yet\n`;
+      }
+      group.items.forEach((item) => {
+        const size = item.size && item.size !== "One Size" ? ` (${item.size})` : "";
+        const done = restockBought.includes(item.key) ? " ✅" : "";
+        text += `  • ${item.color}${size}: have ${item.have}, buy ${item.toBuy} = GH₵${formatMoney(item.cost)}${done}\n`;
+      });
+      text += `\n`;
+    });
+    text += `Total: ${restockTotals.units} items — GH₵${formatMoney(restockTotals.cost)}\n`;
+    text += `Date: ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    return text;
+  };
+
+  const handleCopyRestockList = () => {
+    navigator.clipboard
+      .writeText(buildRestockText())
+      .then(() => {
+        setRestockCopied(true);
+        setTimeout(() => setRestockCopied(false), 2000);
+      })
+      .catch((err) => {
+        console.error("Clipboard copy failed:", err);
+        alert("Could not copy the list automatically. Please try again.");
+      });
+  };
+
+  // ==========================================
   // VIEW RENDERERS
   // ==========================================
 
@@ -3612,10 +3752,20 @@ export default function Home() {
 
                   {/* Restock Alerts */}
                   <div className="mt-8 border-t border-outline-variant/20 pt-6">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface mb-3 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-warning text-[18px]">warning</span>
-                      Inventory Stock Alerts
-                    </h4>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-warning text-[18px]">warning</span>
+                        Inventory Stock Alerts
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentTab("restock")}
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">checklist</span>
+                        Restock List
+                      </button>
+                    </div>
                     
                     <div className="space-y-2">
                       {products.map((prod) => {
@@ -5552,6 +5702,203 @@ export default function Home() {
           )}
 
           {/* ==========================================
+              RESTOCK LIST (shopping list for the market)
+              ========================================== */}
+          {currentTab === "restock" && (
+            <div className="space-y-6">
+
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold font-headline-lg tracking-tight text-on-surface">
+                    Restock List
+                  </h2>
+                  <p className="text-sm text-on-surface-variant font-body-md">
+                    Everything you need to buy so you have at least {restockMin} of each color and size.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyRestockList}
+                    disabled={restockList.length === 0}
+                    className={`px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 ${
+                      restockCopied ? "bg-success text-white" : "bg-primary hover:bg-primary-hover text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">{restockCopied ? "check" : "content_copy"}</span>
+                    {restockCopied ? "Copied!" : "Copy All"}
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(buildRestockText())}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-disabled={restockList.length === 0}
+                    className={`px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5b] text-white transition-all ${
+                      restockList.length === 0 ? "opacity-50 pointer-events-none" : ""
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">share</span>
+                    Send on WhatsApp
+                  </a>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <div className="bg-surface-lowest p-4 rounded-2xl border border-outline-variant/30 premium-shadow">
+                  <p className="text-xs font-bold text-on-surface-variant">Items to buy</p>
+                  <p className="text-xl font-bold font-display text-on-surface mt-1">{restockTotals.units}</p>
+                  <p className="text-[11px] text-on-surface-variant">
+                    From {restockList.length} {restockList.length === 1 ? "product" : "products"}
+                  </p>
+                </div>
+                <div className="bg-surface-lowest p-4 rounded-2xl border border-outline-variant/30 premium-shadow">
+                  <p className="text-xs font-bold text-on-surface-variant">Money needed</p>
+                  <p className="text-xl font-bold font-display text-primary mt-1">GH₵{formatMoney(restockTotals.cost)}</p>
+                  <p className="text-[11px] text-on-surface-variant">At cost price</p>
+                </div>
+                <div className="bg-surface-lowest p-4 rounded-2xl border border-outline-variant/30 premium-shadow">
+                  <p className="text-xs font-bold text-on-surface-variant">Money You Have</p>
+                  <p className="text-xl font-bold font-display text-emerald-700 dark:text-emerald-400 mt-1">
+                    GH₵{formatMoney(wallet.capitalCash + wallet.profitWallet)}
+                  </p>
+                  <p className={`text-[11px] font-semibold ${
+                    wallet.capitalCash + wallet.profitWallet >= restockTotals.cost ? "text-success" : "text-error"
+                  }`}>
+                    {wallet.capitalCash + wallet.profitWallet >= restockTotals.cost
+                      ? "Enough to buy everything"
+                      : `Short by GH₵${formatMoney(restockTotals.cost - wallet.capitalCash - wallet.profitWallet)}`}
+                  </p>
+                </div>
+                <div className="bg-surface-lowest p-4 rounded-2xl border border-outline-variant/30 premium-shadow">
+                  <p className="text-xs font-bold text-on-surface-variant">Keep at least</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => changeRestockMin(restockMin - 1)}
+                      aria-label="Keep fewer"
+                      className="w-9 h-9 rounded-lg border border-outline-variant flex items-center justify-center text-on-surface hover:bg-surface-low"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">remove</span>
+                    </button>
+                    <span className="text-xl font-bold font-display text-on-surface w-8 text-center">{restockMin}</span>
+                    <button
+                      type="button"
+                      onClick={() => changeRestockMin(restockMin + 1)}
+                      aria-label="Keep more"
+                      className="w-9 h-9 rounded-lg border border-outline-variant flex items-center justify-center text-on-surface hover:bg-surface-low"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">add</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant mt-1">of each color/size</p>
+                </div>
+              </div>
+
+              {restockBought.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-success/10 border border-success/25 text-sm">
+                  <span className="text-on-surface">
+                    Ticked as bought: <strong>GH₵{formatMoney(restockTotals.boughtCost)}</strong> of GH₵{formatMoney(restockTotals.cost)}
+                  </span>
+                  <button type="button" onClick={clearRestockBought} className="text-xs font-bold text-on-surface-variant underline underline-offset-2">
+                    Clear ticks
+                  </button>
+                </div>
+              )}
+
+              {/* The list */}
+              {restockList.length === 0 ? (
+                <div className="bg-surface-lowest p-10 rounded-3xl border border-outline-variant/30 premium-shadow text-center">
+                  <span className="material-symbols-outlined text-[40px] text-success">task_alt</span>
+                  <p className="text-base font-bold text-on-surface mt-2">Nothing to buy</p>
+                  <p className="text-sm text-on-surface-variant">You have at least {restockMin} of every color and size.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 items-start">
+                  {restockList.map((group) => (
+                    <div
+                      key={group.product.id}
+                      className="bg-surface-lowest rounded-3xl border border-outline-variant/30 premium-shadow overflow-hidden"
+                    >
+                      <div className="flex items-center gap-3 p-4 border-b border-outline-variant/20 bg-surface-low/50">
+                        <span className="text-3xl leading-none" aria-hidden="true">{group.product.image}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-on-surface">{group.product.name}</p>
+                          <p className="text-xs text-on-surface-variant">
+                            Cost GH₵{formatMoney(group.product.costPrice)} each · {group.product.category}
+                          </p>
+                        </div>
+                        {group.units > 0 && (
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-bold text-primary">GH₵{formatMoney(group.cost)}</p>
+                            <p className="text-[11px] text-on-surface-variant">{group.units} to buy</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {group.noStockYet && (
+                        <p className="px-4 py-3 text-xs text-on-surface-variant">
+                          No colors or sizes recorded yet. Use <strong>Bulk Purchase</strong> after buying.
+                        </p>
+                      )}
+
+                      <div className="divide-y divide-outline-variant/15">
+                        {group.items.map((item) => {
+                          const bought = restockBought.includes(item.key);
+                          return (
+                            <label
+                              key={item.key}
+                              className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-surface-low/40 ${bought ? "opacity-55" : ""}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={bought}
+                                onChange={() => toggleRestockBought(item.key)}
+                                className="w-5 h-5 accent-[var(--success)] flex-shrink-0"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-sm font-bold text-on-surface ${bought ? "line-through" : ""}`}>
+                                  {item.color}
+                                  {item.size && item.size !== "One Size" && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-surface text-[11px] font-bold text-on-surface-variant">
+                                      {item.size}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-[11px] text-on-surface-variant mt-0.5">
+                                  Have{" "}
+                                  <strong className={item.have === 0 ? "text-error" : "text-on-surface"}>
+                                    {item.have === 0 ? "none" : item.have}
+                                  </strong>
+                                  {item.soldLast30 > 0 && (
+                                    <span className={item.soldLast30 >= restockMin ? "text-success font-bold" : ""}>
+                                      {" "}· sold {item.soldLast30} in 30 days{item.soldLast30 >= restockMin ? " 🔥" : ""}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-sm font-bold text-on-surface">Buy {item.toBuy}</p>
+                                <p className="text-[11px] text-on-surface-variant">GH₵{formatMoney(item.cost)}</p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-xs text-on-surface-variant">
+                🔥 means it sells fast, so you may want to buy more than the list says. After buying, record the stock
+                in <button type="button" onClick={() => setCurrentTab("bulk-purchase")} className="font-bold text-primary underline underline-offset-2">Bulk Purchase</button> so it is added to your stock.
+              </p>
+            </div>
+          )}
+
+          {/* ==========================================
               TAB 9: TRANSACTIONS
               ========================================== */}
           {currentTab === "transactions" && (
@@ -6148,6 +6495,7 @@ const navGroups = [
     title: "Operations",
     items: [
       { id: "inventory", label: "Inventory", icon: "inventory_2" },
+      { id: "restock", label: "Restock List", icon: "checklist" },
       { id: "purchases", label: "Purchases", icon: "shopping_bag" },
       { id: "transactions", label: "Transactions", icon: "receipt_long" }
     ]
