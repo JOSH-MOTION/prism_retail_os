@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useEffectEvent, useMemo, useRef, useSyncExternalStore } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -334,11 +334,87 @@ const INITIAL_WALLET = {
   profitWithdrawn: 0
 };
 
+type Wallet = typeof INITIAL_WALLET;
+
+// Offline (localStorage) account record.
+interface LocalUser {
+  username: string;
+  businessName: string;
+  email: string;
+  password: string;
+  products?: Product[];
+  purchases?: PurchaseBatch[];
+  transactions?: Transaction[];
+  sales?: Sale[];
+  wallet?: Wallet;
+}
+
+const formatMoney = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Supabase errors are plain objects with a `message`, not Error instances.
+const errorMessage = (err: unknown): string =>
+  err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
+
 // ==========================================
 // DATABASE RELATIONAL MAPPING HELPERS
 // ==========================================
 
-const mapDBProduct = (p: any): Product => ({
+// Postgres NUMERIC columns arrive as strings, so numeric fields accept both.
+type DBNumeric = number | string;
+
+interface DBProductRow {
+  id: string;
+  name: string;
+  category: string;
+  cost_price: DBNumeric;
+  selling_price: DBNumeric;
+  image: string;
+  variants: Variant[];
+}
+
+interface DBSaleRow {
+  id: string;
+  date: string;
+  product_name: string;
+  color: string;
+  size: string;
+  quantity: DBNumeric;
+  selling_price: DBNumeric;
+  cost_price: DBNumeric;
+  customer_name: string;
+  revenue: DBNumeric;
+  cost: DBNumeric;
+  profit: DBNumeric;
+}
+
+interface DBPurchaseRow {
+  id: string;
+  supplier: string;
+  date: string;
+  total_quantity: DBNumeric;
+  total_amount: DBNumeric;
+  items: PurchaseItem[];
+}
+
+interface DBTransactionRow {
+  id: string;
+  date: string;
+  type: Transaction["type"];
+  description: string;
+  amount: DBNumeric;
+  status: Transaction["status"];
+  profit: DBNumeric | null;
+  cost: DBNumeric | null;
+}
+
+interface DBWalletRow {
+  capital_cash: DBNumeric;
+  profit_wallet: DBNumeric;
+  profit_reinvested: DBNumeric;
+  profit_withdrawn: DBNumeric;
+}
+
+const mapDBProduct = (p: DBProductRow): Product => ({
   id: p.id,
   name: p.name,
   category: p.category,
@@ -348,7 +424,7 @@ const mapDBProduct = (p: any): Product => ({
   variants: p.variants
 });
 
-const mapDBSale = (s: any): Sale => ({
+const mapDBSale = (s: DBSaleRow): Sale => ({
   id: s.id,
   date: s.date,
   productName: s.product_name,
@@ -363,7 +439,7 @@ const mapDBSale = (s: any): Sale => ({
   profit: Number(s.profit)
 });
 
-const mapDBPurchase = (p: any): PurchaseBatch => ({
+const mapDBPurchase = (p: DBPurchaseRow): PurchaseBatch => ({
   id: p.id,
   supplier: p.supplier,
   date: p.date,
@@ -372,26 +448,86 @@ const mapDBPurchase = (p: any): PurchaseBatch => ({
   items: p.items
 });
 
-const mapDBTransaction = (t: any): Transaction => ({
+const mapDBTransaction = (t: DBTransactionRow): Transaction => ({
   id: t.id,
   date: t.date,
   type: t.type,
   description: t.description,
   amount: Number(t.amount),
   status: t.status,
-  profit: t.profit ? Number(t.profit) : undefined,
-  cost: t.cost ? Number(t.cost) : undefined
+  profit: t.profit != null ? Number(t.profit) : undefined,
+  cost: t.cost != null ? Number(t.cost) : undefined
 });
 
-const mapDBWallet = (w: any) => ({
+const mapDBWallet = (w: DBWalletRow): Wallet => ({
   capitalCash: Number(w.capital_cash),
   profitWallet: Number(w.profit_wallet),
   profitReinvested: Number(w.profit_reinvested),
   profitWithdrawn: Number(w.profit_withdrawn)
 });
 
+// Badge colour + icon for each ledger entry type.
+const txTypeStyle = (type: Transaction["type"]): { className: string; icon: string } => {
+  switch (type) {
+    case "Sale":
+      return { className: "bg-success-container/10 text-success", icon: "payments" };
+    case "Purchase":
+      return { className: "bg-error-container/10 text-error", icon: "shopping_bag" };
+    case "Withdrawal":
+      return { className: "bg-warning-container text-on-warning-container", icon: "logout" };
+    case "Profit Reinvestment":
+      return { className: "bg-emerald-600/10 text-emerald-600", icon: "restart_alt" };
+    case "Investment":
+      return { className: "bg-blue-600/10 text-blue-600", icon: "explore" };
+    case "Adjustment":
+      return { className: "bg-purple-600/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400", icon: "tune" };
+    case "Bank Deposit":
+      return { className: "bg-sky-600/10 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400", icon: "account_balance" };
+    default:
+      return { className: "bg-primary/10 text-primary", icon: "info" };
+  }
+};
+
+// Password input with a labelled Show/Hide toggle (large tap target for phones).
+function PasswordField({
+  value,
+  onChange,
+  placeholder
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={visible ? "text" : "password"}
+        required
+        autoComplete="current-password"
+        className="w-full pl-4 pr-20 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Hide password" : "Show password"}
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 px-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface flex items-center gap-1 text-xs font-semibold select-none"
+      >
+        <span className="material-symbols-outlined text-[18px]">{visible ? "visibility_off" : "visibility"}</span>
+        {visible ? "Hide" : "Show"}
+      </button>
+    </div>
+  );
+}
+
+const subscribeNoop = () => () => {};
+
 export default function Home() {
-  const [isMounted, setIsMounted] = useState(false);
+  // false during SSR/hydration, true once running in the browser
+  const isMounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
 
   // Auth States
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -404,15 +540,16 @@ export default function Home() {
   const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authAlert, setAuthAlert] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   // Supabase Database Connection indicators
-  const [isDbConnected, setIsDbConnected] = useState(false);
+  const isDbConnected = supabase !== null;
   const [isLoadingDB, setIsLoadingDB] = useState(false);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
 
   // App Theme
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("sp_dark_mode") === "true"
+  );
 
   // Tab routing
   const [currentTab, setCurrentTab] = useState("dashboard");
@@ -474,18 +611,24 @@ export default function Home() {
   const [saleAlert, setSaleAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   // Wallet Page action variables
-  const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [withdrawBank, setWithdrawBank] = useState("");
+  const [takeAmount, setTakeAmount] = useState("");
+  const [takeReason, setTakeReason] = useState("Market");
+  const [takeNote, setTakeNote] = useState("");
+  const [showMoreMoneyTools, setShowMoreMoneyTools] = useState(false);
   const [reinvestAmount, setReinvestAmount] = useState("");
   const [editCapitalCash, setEditCapitalCash] = useState("");
   const [editProfitWallet, setEditProfitWallet] = useState("");
   const [editProfitWithdrawn, setEditProfitWithdrawn] = useState("");
   const [walletAlert, setWalletAlert] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
 
-  // Bank Profit Deposit log (record-only journal, never moves a balance)
+  // Move Money to Bank form, plus inline editing of an existing bank entry
+  const [editingDepositId, setEditingDepositId] = useState<string | null>(null);
+  const [editDepositAmount, setEditDepositAmount] = useState("");
+  const [editDepositDate, setEditDepositDate] = useState("");
+  const [editDepositNote, setEditDepositNote] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositNote, setDepositNote] = useState("");
-  const [depositDate, setDepositDate] = useState("");
+  const [depositDate, setDepositDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Transactions filters
   const [txFilter, setTxFilter] = useState("All");
@@ -499,63 +642,24 @@ export default function Home() {
   // INITIALIZATION AND SYNC
   // ==========================================
 
+  // Every tab starts at the top; otherwise a short tab opened from far down a
+  // long one shows only empty space.
+  const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    setIsMounted(true);
-    setDepositDate(new Date().toISOString().split("T")[0]);
+    mainRef.current?.scrollTo(0, 0);
+  }, [currentTab]);
 
-    // Check Dark Mode
-    const cachedTheme = localStorage.getItem("sp_dark_mode");
-    if (cachedTheme === "true") {
-      setDarkMode(true);
-      document.documentElement.classList.add("dark");
-    } else {
-      setDarkMode(false);
-      document.documentElement.classList.remove("dark");
-    }
+  // Success messages clear themselves; errors stay until closed.
+  useEffect(() => {
+    if (walletAlert?.type !== "success") return;
+    const timer = setTimeout(() => setWalletAlert(null), 5000);
+    return () => clearTimeout(timer);
+  }, [walletAlert]);
 
-    if (supabase) {
-      setIsDbConnected(true);
-      
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          setIsLoggedIn(true);
-          const user = session.user;
-          setActiveUserId(user.id);
-          setUsername(user.user_metadata?.username || "Boutique Owner");
-          setBusinessName(user.user_metadata?.business_name || "Retail Workspace");
-          setEmail(user.email || "");
-          fetchUserData(user.id);
-        } else {
-          checkLocalFallback();
-        }
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === "PASSWORD_RECOVERY") {
-          setAuthView("reset-password");
-          setIsLoggedIn(false);
-        } else if (session?.user) {
-          setIsLoggedIn(true);
-          const user = session.user;
-          setActiveUserId(user.id);
-          setUsername(user.user_metadata?.username || "Boutique Owner");
-          setBusinessName(user.user_metadata?.business_name || "Retail Workspace");
-          setEmail(user.email || "");
-          fetchUserData(user.id);
-        } else {
-          setIsLoggedIn(false);
-          setActiveUserId(null);
-        }
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    } else {
-      setIsDbConnected(false);
-      checkLocalFallback();
-    }
-  }, []);
+  // Keep the <html> class in sync with the theme toggle.
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+  }, [darkMode]);
 
   const checkLocalFallback = () => {
     const cachedAuth = localStorage.getItem("sp_is_logged_in");
@@ -564,7 +668,7 @@ export default function Home() {
       const curEmail = localStorage.getItem("sp_email") || "";
       const cachedUsersRaw = localStorage.getItem("sp_local_users");
       const localUsers = cachedUsersRaw ? JSON.parse(cachedUsersRaw) : [];
-      const matchedUser = localUsers.find((u: any) => u.email.toLowerCase() === curEmail.toLowerCase());
+      const matchedUser = localUsers.find((u: LocalUser) => u.email.toLowerCase() === curEmail.toLowerCase());
 
       if (matchedUser) {
         setUsername(matchedUser.username);
@@ -619,7 +723,7 @@ export default function Home() {
     if (currentUserEmail) {
       const cachedUsersRaw = localStorage.getItem("sp_local_users");
       const localUsers = cachedUsersRaw ? JSON.parse(cachedUsersRaw) : [];
-      const userIdx = localUsers.findIndex((u: any) => u.email.toLowerCase() === currentUserEmail.toLowerCase());
+      const userIdx = localUsers.findIndex((u: LocalUser) => u.email.toLowerCase() === currentUserEmail.toLowerCase());
       if (userIdx > -1) {
         localUsers[userIdx].products = newProducts;
         localUsers[userIdx].purchases = newPurchases;
@@ -711,13 +815,58 @@ export default function Home() {
       if (tErr) throw tErr;
       if (txData) setTransactions(txData.map(mapDBTransaction));
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading user data from Supabase:", err);
       checkLocalFallback();
     } finally {
       setIsLoadingDB(false);
     }
   };
+
+  // Effect events always see the latest handlers without re-subscribing.
+  const onSignedIn = useEffectEvent((user: { id: string; email?: string; user_metadata?: Record<string, string> }) => {
+    setIsLoggedIn(true);
+    setActiveUserId(user.id);
+    setUsername(user.user_metadata?.username || "Boutique Owner");
+    setBusinessName(user.user_metadata?.business_name || "Retail Workspace");
+    setEmail(user.email || "");
+    fetchUserData(user.id);
+  });
+  const onNoSession = useEffectEvent(() => checkLocalFallback());
+
+  useEffect(() => {
+    if (!supabase) {
+      // Offline mode: localStorage only exists in the browser, so the saved
+      // workspace has to be loaded after mount rather than during render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      onNoSession();
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        onSignedIn(session.user);
+      } else {
+        onNoSession();
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setAuthView("reset-password");
+        setIsLoggedIn(false);
+      } else if (session?.user) {
+        onSignedIn(session.user);
+      } else {
+        setIsLoggedIn(false);
+        setActiveUserId(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const seedSupabaseUser = async (userId: string) => {
     if (!supabase) return;
@@ -798,9 +947,30 @@ export default function Home() {
     }, 0);
   }, [products]);
 
+  // Money in the bank is the sum of all bank entries. Only the part that was
+  // actually taken out of profit is added to business worth, since older
+  // record-only entries are still counted inside the Profit Wallet.
+  const bankTotals = useMemo(() => {
+    let inBank = 0;
+    let movedFromProfit = 0;
+    transactions.forEach((tx) => {
+      if (tx.type === "Bank Deposit") {
+        inBank += tx.amount;
+        movedFromProfit += tx.profit ?? 0;
+      }
+    });
+    return { inBank, movedFromProfit };
+  }, [transactions]);
+
+  // Bank entries from before "Move to Bank" existed; they never reduced profit.
+  const oldBankRecords = useMemo(
+    () => transactions.filter((tx) => tx.type === "Bank Deposit" && tx.profit === undefined),
+    [transactions]
+  );
+
   const dynamicBusinessWorth = useMemo(() => {
-    return wallet.capitalCash + wallet.profitWallet + dynamicInventoryValue;
-  }, [wallet.capitalCash, wallet.profitWallet, dynamicInventoryValue]);
+    return wallet.capitalCash + wallet.profitWallet + bankTotals.movedFromProfit + dynamicInventoryValue;
+  }, [wallet.capitalCash, wallet.profitWallet, bankTotals.movedFromProfit, dynamicInventoryValue]);
 
   const totalProductsInStock = useMemo(() => {
     return products.reduce((acc, prod) => {
@@ -862,15 +1032,17 @@ export default function Home() {
     return match ? match.quantity : 0;
   }, [selectedProductObj, saleColorSelect, saleSizeSelect]);
 
-  // Default selling price when product changes
-  useEffect(() => {
-    if (selectedProductObj) {
-      setSalePriceInput(selectedProductObj.sellingPrice > 0 ? selectedProductObj.sellingPrice.toString() : "");
+  // Picking a product pre-fills its selling price and resets the variant fields.
+  const selectSaleProduct = (productId: string) => {
+    setSaleProductSelect(productId);
+    const prod = products.find((p) => p.id === productId);
+    if (prod) {
+      setSalePriceInput(prod.sellingPrice > 0 ? prod.sellingPrice.toString() : "");
       setSaleColorSelect("");
       setSaleSizeSelect("");
       setSaleQtyInput(1);
     }
-  }, [saleProductSelect, selectedProductObj]);
+  };
 
   // ==========================================
   // ACTIONS / HANDLERS
@@ -949,8 +1121,8 @@ export default function Home() {
             setAuthAlert(null);
           }, 2000);
         }
-      } catch (err: any) {
-        setAuthAlert({ type: "error", msg: err.message || "An authentication error occurred." });
+      } catch (err: unknown) {
+        setAuthAlert({ type: "error", msg: errorMessage(err) || "An authentication error occurred." });
       } finally {
         setIsAuthenticating(false);
       }
@@ -961,7 +1133,7 @@ export default function Home() {
         const localUsers = cachedUsersRaw ? JSON.parse(cachedUsersRaw) : [];
 
         if (authView === "register") {
-          const userExists = localUsers.some((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          const userExists = localUsers.some((u: LocalUser) => u.email.toLowerCase() === email.toLowerCase());
           if (userExists) {
             setAuthAlert({ type: "error", msg: "This email address is already registered. Please login instead." });
             setIsAuthenticating(false);
@@ -1010,7 +1182,7 @@ export default function Home() {
           setAuthAlert({ type: "success", msg: "Registered successfully! Loading workspace..." });
         } else if (authView === "login") {
           const matchedUser = localUsers.find(
-            (u: any) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+            (u: LocalUser) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
           );
 
           if (!matchedUser) {
@@ -1042,7 +1214,7 @@ export default function Home() {
           localStorage.setItem("sp_sales", JSON.stringify(matchedUser.sales || []));
           localStorage.setItem("sp_wallet", JSON.stringify(matchedUser.wallet || INITIAL_WALLET));
         } else if (authView === "forgot") {
-          const userExists = localUsers.some((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          const userExists = localUsers.some((u: LocalUser) => u.email.toLowerCase() === email.toLowerCase());
           if (!userExists) {
             setAuthAlert({ type: "error", msg: "This email address is not registered in our system." });
             setIsAuthenticating(false);
@@ -1062,7 +1234,7 @@ export default function Home() {
             setIsAuthenticating(false);
             return;
           }
-          const userIdx = localUsers.findIndex((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          const userIdx = localUsers.findIndex((u: LocalUser) => u.email.toLowerCase() === email.toLowerCase());
           if (userIdx === -1) {
             setAuthAlert({ type: "error", msg: "User account session mapping failed." });
             setIsAuthenticating(false);
@@ -1260,8 +1432,8 @@ export default function Home() {
           setNewProdImage("📦");
           setTimeout(() => setShowAddProductModal(false), 800);
         }
-      } catch (err: any) {
-        setProductAddAlert({ type: "error", msg: `DB Error: ${err.message}` });
+      } catch (err: unknown) {
+        setProductAddAlert({ type: "error", msg: `DB Error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1369,8 +1541,8 @@ export default function Home() {
         await fetchUserData(activeUserId);
         setProductEditAlert({ type: "success", msg: `Successfully updated ${updatedProduct.name}.` });
         setTimeout(() => setShowEditProductModal(false), 800);
-      } catch (err: any) {
-        setProductEditAlert({ type: "error", msg: `DB Error: ${err.message}` });
+      } catch (err: unknown) {
+        setProductEditAlert({ type: "error", msg: `DB Error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1396,8 +1568,8 @@ export default function Home() {
         const { error } = await supabase.from("products").delete().eq("id", prod.id);
         if (error) throw error;
         await fetchUserData(activeUserId);
-      } catch (err: any) {
-        window.alert(`DB Error: ${err.message}`);
+      } catch (err: unknown) {
+        window.alert(`DB Error: ${errorMessage(err)}`);
       } finally {
         setIsLoadingDB(false);
       }
@@ -1457,8 +1629,8 @@ export default function Home() {
 
         await fetchUserData(activeUserId);
         setWalletAlert({ type: "success", msg: `Successfully injected GH₵${amount.toLocaleString()} capital cash!` });
-      } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+      } catch (err: unknown) {
+        setWalletAlert({ type: "error", msg: `Database error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1471,82 +1643,215 @@ export default function Home() {
     setInjectAmount("");
   };
 
-  // Bank Profit Deposit — a record-only journal entry.
-  // It stamps the amount with a date so the monthly breakdown can total it up, and
-  // deliberately leaves capitalCash, profitWallet and profitWithdrawn untouched.
-  const handleRecordProfitDeposit = async (e: React.FormEvent) => {
+  // Saves a wallet change together with its ledger write, in the cloud or locally.
+  // `dbWrite` performs the transaction insert/update/delete for Supabase;
+  // `localTransactions` is the full ledger to persist in offline mode.
+  const commitMoneyChange = async (
+    nextWallet: Wallet,
+    localTransactions: Transaction[],
+    dbWrite: () => PromiseLike<{ error: unknown }>,
+    successMsg: string
+  ) => {
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        const { error: txErr } = await dbWrite();
+        if (txErr) throw txErr;
+
+        const { error: wErr } = await supabase
+          .from("wallets")
+          .update({
+            capital_cash: nextWallet.capitalCash,
+            profit_wallet: nextWallet.profitWallet,
+            profit_reinvested: nextWallet.profitReinvested,
+            profit_withdrawn: nextWallet.profitWithdrawn
+          })
+          .eq("user_id", activeUserId);
+        if (wErr) throw wErr;
+
+        await fetchUserData(activeUserId);
+        setWalletAlert({ type: "success", msg: successMsg });
+        return true;
+      } catch (err: unknown) {
+        setWalletAlert({ type: "error", msg: `Database error: ${errorMessage(err)}` });
+        return false;
+      } finally {
+        setIsLoadingDB(false);
+      }
+    }
+
+    const sorted = [...localTransactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    saveLocalState(products, purchases, sorted, sales, nextWallet);
+    setWalletAlert({ type: "success", msg: successMsg });
+    return true;
+  };
+
+  // Anchor dates at midday so the stored UTC timestamp cannot slip into the
+  // neighbouring day/month for browsers behind or ahead of UTC.
+  const parseEntryDate = (value: string) => (value ? new Date(`${value}T12:00:00`) : new Date());
+
+  const bankDescription = (note: string) => (note.trim() ? `Moved profit to bank — ${note.trim()}` : "Moved profit to bank");
+
+  // Move Money to Bank — takes the amount out of the Profit Wallet only.
+  // The amount taken from profit is kept on the entry (`profit`) so edits and
+  // deletes can put back exactly what was taken. Older record-only entries
+  // have no `profit` and never touched a balance.
+  const handleMoveToBank = async (e: React.FormEvent) => {
     e.preventDefault();
     setWalletAlert(null);
 
     const amount = parseFloat(depositAmount);
     if (isNaN(amount) || amount <= 0) {
-      setWalletAlert({ type: "error", msg: "Please enter a valid profit amount to log." });
+      setWalletAlert({ type: "error", msg: "Type how much money you put in the bank." });
+      return;
+    }
+    if (amount > wallet.profitWallet) {
+      setWalletAlert({
+        type: "error",
+        msg: `Not enough profit. You only have GH₵${formatMoney(wallet.profitWallet)} in profit.`
+      });
       return;
     }
 
-    // Anchor the entry at midday so the stored UTC timestamp cannot slip into the
-    // neighbouring month for browsers sitting behind or ahead of UTC.
-    const entryDate = depositDate ? new Date(`${depositDate}T12:00:00`) : new Date();
+    const entryDate = parseEntryDate(depositDate);
     if (isNaN(entryDate.getTime())) {
-      setWalletAlert({ type: "error", msg: "Please pick a valid deposit date." });
+      setWalletAlert({ type: "error", msg: "Please pick a valid date." });
       return;
     }
 
-    const monthLabel = entryDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    const description = depositNote.trim()
-      ? `Profit banked in ${monthLabel} — ${depositNote.trim()}`
-      : `Profit banked in ${monthLabel}`;
-
+    const description = bankDescription(depositNote);
     const newTx: Transaction = {
       id: `tx-${Date.now()}`,
       date: entryDate.toISOString(),
       type: "Bank Deposit",
-      description: description,
-      amount: amount,
-      status: "Completed"
+      description,
+      amount,
+      status: "Completed",
+      profit: amount
     };
+    const nextWallet = { ...wallet, profitWallet: wallet.profitWallet - amount };
 
-    if (supabase && activeUserId) {
-      setIsLoadingDB(true);
-      try {
-        const { error: txErr } = await supabase
-          .from("transactions")
-          .insert([
-            {
-              user_id: activeUserId,
-              date: newTx.date,
-              type: "Bank Deposit",
-              description: description,
-              amount: amount,
-              status: "Completed"
-            }
-          ]);
-        if (txErr) throw txErr;
+    const ok = await commitMoneyChange(
+      nextWallet,
+      [newTx, ...transactions],
+      () =>
+        supabase!.from("transactions").insert([
+          {
+            user_id: activeUserId,
+            date: newTx.date,
+            type: "Bank Deposit",
+            description,
+            amount,
+            status: "Completed",
+            profit: amount
+          }
+        ]),
+      `GH₵${formatMoney(amount)} moved from profit to the bank.`
+    );
+    if (ok) {
+      setDepositAmount("");
+      setDepositNote("");
+    }
+  };
 
-        await fetchUserData(activeUserId);
-        setWalletAlert({
-          type: "success",
-          msg: `Logged GH₵${amount.toLocaleString()} banked profit under ${monthLabel}. No balances were changed.`
-        });
-      } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
-      } finally {
-        setIsLoadingDB(false);
-      }
-    } else {
-      // Re-sort because a back-dated entry must not simply sit on top of the ledger.
-      const updatedTransactions = [newTx, ...transactions].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-      saveLocalState(products, purchases, updatedTransactions, sales, wallet);
-      setWalletAlert({
-        type: "success",
-        msg: `Logged GH₵${amount.toLocaleString()} banked profit under ${monthLabel} (Local mode). No balances were changed.`
-      });
+  const startEditDeposit = (tx: Transaction) => {
+    setEditingDepositId(tx.id);
+    setEditDepositAmount(String(tx.amount));
+    setEditDepositDate(new Date(tx.date).toISOString().split("T")[0]);
+    setEditDepositNote(tx.description.replace(/^(Moved profit to bank|Profit banked in [A-Za-z]+ \d{4})( — )?/, ""));
+    setWalletAlert(null);
+  };
+
+  const handleSaveDepositEdit = async (tx: Transaction) => {
+    const amount = parseFloat(editDepositAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setWalletAlert({ type: "error", msg: "Type a valid amount." });
+      return;
+    }
+    const entryDate = parseEntryDate(editDepositDate);
+    if (isNaN(entryDate.getTime())) {
+      setWalletAlert({ type: "error", msg: "Please pick a valid date." });
+      return;
     }
 
-    setDepositAmount("");
-    setDepositNote("");
+    // Only entries that took from profit adjust it; record-only ones stay record-only.
+    const tookFromProfit = tx.profit !== undefined;
+    const extra = tookFromProfit ? amount - (tx.profit ?? 0) : 0;
+    if (extra > wallet.profitWallet) {
+      setWalletAlert({
+        type: "error",
+        msg: `Not enough profit to add GH₵${formatMoney(extra)} more. You have GH₵${formatMoney(wallet.profitWallet)}.`
+      });
+      return;
+    }
+
+    const description = bankDescription(editDepositNote);
+    const updated: Transaction = {
+      ...tx,
+      amount,
+      date: entryDate.toISOString(),
+      description,
+      profit: tookFromProfit ? amount : undefined
+    };
+    const nextWallet = { ...wallet, profitWallet: wallet.profitWallet - extra };
+
+    const ok = await commitMoneyChange(
+      nextWallet,
+      transactions.map((t) => (t.id === tx.id ? updated : t)),
+      () =>
+        supabase!
+          .from("transactions")
+          .update({ amount, date: updated.date, description, profit: updated.profit ?? null })
+          .eq("id", tx.id),
+      "Bank entry updated."
+    );
+    if (ok) setEditingDepositId(null);
+  };
+
+  // For old record-only bank entries whose money the owner already removed from
+  // profit by hand (e.g. with "Fix balances"). Marks them as taken from profit
+  // WITHOUT deducting again, so worth, edits and deletes treat them like new entries.
+  const handleMarkDepositsDeducted = async (entries: Transaction[]) => {
+    if (entries.length === 0) return;
+    const total = entries.reduce((acc, tx) => acc + tx.amount, 0);
+    const confirmed = window.confirm(
+      `Did you already take GH₵${formatMoney(total)} out of your profit yourself?\n\n` +
+        "Tap OK and the app will count this money as in the bank. Your profit will NOT go down again."
+    );
+    if (!confirmed) return;
+
+    const ids = new Set(entries.map((tx) => tx.id));
+    await commitMoneyChange(
+      wallet,
+      transactions.map((t) => (ids.has(t.id) ? { ...t, profit: t.amount } : t)),
+      async () => {
+        const results = await Promise.all(
+          entries.map((tx) => supabase!.from("transactions").update({ profit: tx.amount }).eq("id", tx.id))
+        );
+        return { error: results.find((r) => r.error)?.error ?? null };
+      },
+      entries.length === 1
+        ? `GH₵${formatMoney(total)} now counted as money in the bank.`
+        : `${entries.length} old records (GH₵${formatMoney(total)}) now counted as money in the bank.`
+    );
+  };
+
+  const handleDeleteDeposit = async (tx: Transaction) => {
+    const refund = tx.profit ?? 0;
+    const confirmed = window.confirm(
+      refund > 0
+        ? `Delete this bank entry? GH₵${formatMoney(refund)} will go back into your profit.`
+        : "Delete this bank entry?"
+    );
+    if (!confirmed) return;
+
+    await commitMoneyChange(
+      { ...wallet, profitWallet: wallet.profitWallet + refund },
+      transactions.filter((t) => t.id !== tx.id),
+      () => supabase!.from("transactions").delete().eq("id", tx.id),
+      refund > 0 ? `Bank entry deleted. GH₵${formatMoney(refund)} returned to profit.` : "Bank entry deleted."
+    );
+    if (editingDepositId === tx.id) setEditingDepositId(null);
   };
 
   // Toggle Dark Mode
@@ -1554,11 +1859,6 @@ export default function Home() {
     const nextMode = !darkMode;
     setDarkMode(nextMode);
     localStorage.setItem("sp_dark_mode", nextMode ? "true" : "false");
-    if (nextMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
   };
 
   // Bulk Purchase: Parser
@@ -1616,8 +1916,8 @@ export default function Home() {
           type: "success",
           msg: `Successfully parsed ${list.reduce((acc, i) => acc + i.quantity, 0)} units across ${list.length} variants!`
         });
-      } catch (err: any) {
-        setParsingAlert({ type: "error", msg: err.message || "An error occurred during text parsing." });
+      } catch (err: unknown) {
+        setParsingAlert({ type: "error", msg: errorMessage(err) || "An error occurred during text parsing." });
         setParsedItems([]);
       } finally {
         setIsParsing(false);
@@ -1786,8 +2086,8 @@ export default function Home() {
             ? `Restock recorded! Charged GH₵${fromCapital.toFixed(2)} to Capital Cash and topped up GH₵${fromProfit.toFixed(2)} from your Profit Wallet.`
             : "Bulk purchase has been successfully recorded in database!"
         });
-      } catch (err: any) {
-        setParsingAlert({ type: "error", msg: `Database error: ${err.message}` });
+      } catch (err: unknown) {
+        setParsingAlert({ type: "error", msg: `Database error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -1949,8 +2249,8 @@ export default function Home() {
           type: "success",
           msg: `Successfully logged sale for ${saleQtyInput} unit(s). Total Profit: GH₵${profit.toFixed(2)}.`
         });
-      } catch (err: any) {
-        setSaleAlert({ type: "error", msg: `Database syncing error: ${err.message}` });
+      } catch (err: unknown) {
+        setSaleAlert({ type: "error", msg: `Database syncing error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -2049,8 +2349,8 @@ export default function Home() {
 
         await fetchUserData(activeUserId);
         setSaleAlert({ type: "success", msg: "Sale deleted. Stock and wallet balances have been recalculated." });
-      } catch (err: any) {
-        setSaleAlert({ type: "error", msg: `Database syncing error: ${err.message}` });
+      } catch (err: unknown) {
+        setSaleAlert({ type: "error", msg: `Database syncing error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -2064,83 +2364,99 @@ export default function Home() {
     }
   };
 
-  // Wallet Transfers
-  const handleWithdraw = async (e: React.FormEvent) => {
+  // How a money-out amount would be paid: business money (capital) first,
+  // then profit for whatever capital cannot cover.
+  const splitMoneyOut = (amount: number) => {
+    const fromCapital = Math.min(amount, Math.max(wallet.capitalCash, 0));
+    const fromProfit = Math.min(amount - fromCapital, Math.max(wallet.profitWallet, 0));
+    return { fromCapital, fromProfit, short: amount - fromCapital - fromProfit };
+  };
+
+  // Take Money Out — for market trips, transport, personal use, etc.
+  // The split is stored on the entry (cost = from capital, profit = from profit)
+  // so deleting it can put the money back where it came from.
+  const handleTakeMoney = async (e: React.FormEvent) => {
     e.preventDefault();
     setWalletAlert(null);
 
-    const amount = parseFloat(withdrawAmount);
+    const amount = parseFloat(takeAmount);
     if (isNaN(amount) || amount <= 0) {
-      setWalletAlert({ type: "error", msg: "Please enter a valid withdrawal amount." });
+      setWalletAlert({ type: "error", msg: "Type how much money you are taking." });
       return;
     }
 
-    if (amount > wallet.profitWallet) {
+    const { fromCapital, fromProfit, short } = splitMoneyOut(amount);
+    if (short > 0.005) {
       setWalletAlert({
         type: "error",
-        msg: `Insufficient profit funds! You only have GH₵${wallet.profitWallet.toLocaleString()} in your profit wallet.`
+        msg: `Not enough money. Business money + profit is only GH₵${formatMoney(fromCapital + fromProfit)}.`
       });
       return;
     }
 
+    const description = takeNote.trim() ? `Took money for ${takeReason} — ${takeNote.trim()}` : `Took money for ${takeReason}`;
     const newTx: Transaction = {
       id: `tx-${Date.now()}`,
       date: new Date().toISOString(),
       type: "Withdrawal",
-      description: `Profit withdrawal to bank account (${withdrawBank || "Default Biz Account"})`,
+      description,
       amount: -amount,
-      status: "Completed"
+      status: "Completed",
+      cost: fromCapital,
+      profit: fromProfit
     };
-
     const nextWallet = {
       ...wallet,
-      profitWallet: wallet.profitWallet - amount,
-      profitWithdrawn: wallet.profitWithdrawn + amount
+      capitalCash: wallet.capitalCash - fromCapital,
+      profitWallet: wallet.profitWallet - fromProfit,
+      profitWithdrawn: wallet.profitWithdrawn + fromProfit
     };
 
-    if (supabase && activeUserId) {
-      setIsLoadingDB(true);
-      try {
-        const { error: txErr } = await supabase
-          .from("transactions")
-          .insert([
-            {
-              user_id: activeUserId,
-              type: "Withdrawal",
-              description: newTx.description,
-              amount: -amount,
-              status: "Completed"
-            }
-          ]);
-        if (txErr) throw txErr;
-
-        const { error: wErr } = await supabase
-          .from("wallets")
-          .update({
-            profit_wallet: nextWallet.profitWallet,
-            profit_withdrawn: nextWallet.profitWithdrawn
-          })
-          .eq("user_id", activeUserId);
-        if (wErr) throw wErr;
-
-        await fetchUserData(activeUserId);
-        setWalletAlert({ type: "success", msg: `Successfully withdrew GH₵${amount.toLocaleString()} from profits.` });
-      } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
-      } finally {
-        setIsLoadingDB(false);
-      }
-    } else {
-      const updatedTransactions = [newTx, ...transactions];
-      saveLocalState(products, purchases, updatedTransactions, sales, nextWallet);
-      setWalletAlert({
-        type: "success",
-        msg: `Withdrew GH₵${amount.toLocaleString()} to bank (Local mode).`
-      });
+    const ok = await commitMoneyChange(
+      nextWallet,
+      [newTx, ...transactions],
+      () =>
+        supabase!.from("transactions").insert([
+          {
+            user_id: activeUserId,
+            type: "Withdrawal",
+            description,
+            amount: -amount,
+            status: "Completed",
+            cost: fromCapital,
+            profit: fromProfit
+          }
+        ]),
+      `Took GH₵${formatMoney(amount)} for ${takeReason}.`
+    );
+    if (ok) {
+      setTakeAmount("");
+      setTakeNote("");
     }
+  };
 
-    setWithdrawAmount("");
-    setWithdrawBank("");
+  const handleDeleteMoneyOut = async (tx: Transaction) => {
+    const total = Math.abs(tx.amount);
+    // Older withdrawals (before the split was stored) always came out of profit.
+    const backToCapital = tx.cost ?? 0;
+    const backToProfit = tx.profit ?? total - backToCapital;
+    const confirmed = window.confirm(
+      `Delete this entry? GH₵${formatMoney(total)} will be put back ` +
+        `(business money GH₵${formatMoney(backToCapital)}, profit GH₵${formatMoney(backToProfit)}).`
+    );
+    if (!confirmed) return;
+
+    await commitMoneyChange(
+      {
+        ...wallet,
+        capitalCash: wallet.capitalCash + backToCapital,
+        profitWallet: wallet.profitWallet + backToProfit,
+        profitWithdrawn: Math.max(wallet.profitWithdrawn - backToProfit, 0)
+      },
+      transactions.filter((t) => t.id !== tx.id),
+      () => supabase!.from("transactions").delete().eq("id", tx.id),
+      `Entry deleted. GH₵${formatMoney(total)} put back.`
+    );
   };
 
   const handleReinvest = async (e: React.FormEvent) => {
@@ -2205,8 +2521,8 @@ export default function Home() {
 
         await fetchUserData(activeUserId);
         setWalletAlert({ type: "success", msg: `Successfully reinvested GH₵${amount.toLocaleString()} into Capital Cash.` });
-      } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+      } catch (err: unknown) {
+        setWalletAlert({ type: "error", msg: `Database error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -2301,8 +2617,8 @@ export default function Home() {
 
         await fetchUserData(activeUserId);
         setWalletAlert({ type: "success", msg: "Successfully updated wallet balances and recorded ledger adjustment!" });
-      } catch (err: any) {
-        setWalletAlert({ type: "error", msg: `Database error: ${err.message}` });
+      } catch (err: unknown) {
+        setWalletAlert({ type: "error", msg: `Database error: ${errorMessage(err)}` });
       } finally {
         setIsLoadingDB(false);
       }
@@ -2344,7 +2660,12 @@ export default function Home() {
     });
   }, [transactions, txSearch, txFilter]);
 
-  // Calendar rollup of the record-only bank deposits, newest month first.
+  const moneyOutEntries = useMemo(
+    () => transactions.filter((tx) => tx.type === "Withdrawal"),
+    [transactions]
+  );
+
+  // Calendar rollup of the bank entries, newest month first.
   const depositsByMonth = useMemo(() => {
     const buckets = new Map<string, { key: string; label: string; total: number; entries: Transaction[] }>();
 
@@ -2371,11 +2692,6 @@ export default function Home() {
       }))
       .sort((a, b) => b.key.localeCompare(a.key));
   }, [transactions]);
-
-  const totalProfitBanked = useMemo(
-    () => depositsByMonth.reduce((acc, m) => acc + m.total, 0),
-    [depositsByMonth]
-  );
 
   // Live preview of how the pending restock would be paid for.
   const bulkFunding = useMemo(() => {
@@ -2612,26 +2928,7 @@ export default function Home() {
                         </button>
                       )}
                     </div>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        required
-                        className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface p-1 select-none flex items-center justify-center"
-                        title={showPassword ? "Hide password" : "Show password"}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {showPassword ? "visibility_off" : "visibility"}
-                        </span>
-                      </button>
-                    </div>
+                    <PasswordField value={password} onChange={setPassword} placeholder="••••••••" />
                   </div>
                 )}
 
@@ -2641,26 +2938,20 @@ export default function Home() {
                       <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
                         New Password
                       </label>
-                      <input
-                        type="password"
-                        required
-                        className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
-                        placeholder="New Password (min 6 chars)"
+                      <PasswordField
                         value={newPasswordInput}
-                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        onChange={setNewPasswordInput}
+                        placeholder="New Password (min 6 chars)"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-outline mb-1">
                         Confirm New Password
                       </label>
-                      <input
-                        type="password"
-                        required
-                        className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none transition-all text-on-surface"
-                        placeholder="Confirm Password"
+                      <PasswordField
                         value={confirmPasswordInput}
-                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                        onChange={setConfirmPasswordInput}
+                        placeholder="Confirm Password"
                       />
                     </div>
                   </>
@@ -2892,7 +3183,7 @@ export default function Home() {
             <button
               onClick={handleResetData}
               title="Load Seed Data"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-medium text-warning-container bg-warning-container/10 border border-warning/20 hover:bg-warning-container/20 hover:text-warning transition-all active:scale-95"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-medium text-on-warning-container bg-warning-container/40 border border-warning/20 hover:bg-warning-container/20 hover:text-warning transition-all active:scale-95"
             >
               <span className="material-symbols-outlined text-[16px]">restart_alt</span>
               Demo Data
@@ -2954,14 +3245,13 @@ export default function Home() {
         </header>
 
         {/* Scrollable Content View */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 select-text">
-          <AnimatePresence mode="wait">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 select-text">
+          {/* Fade the new tab in without fading the old one out first, so the screen is never blank. */}
             <motion.div
               key={currentTab}
-              initial={{ opacity: 0, y: 15 }}
+              initial={{ opacity: 0.4, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.22, ease: "easeInOut" }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
               className="w-full space-y-8 pb-10"
             >
           
@@ -2999,141 +3289,112 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Stat Card Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                
-                {/* 1. Business Worth */}
-                <div className="bg-gradient-to-br from-primary to-primary-hover text-white p-5 rounded-2xl premium-shadow-lg flex flex-col justify-between h-32 select-none relative overflow-hidden">
+              {/* Stat Card Grid — two per row on phones, three on desktop */}
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
+
+                {/* Business Worth (full width on phones) */}
+                <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-primary to-primary-hover text-white p-4 md:p-5 rounded-2xl premium-shadow-lg flex flex-col justify-between gap-3 min-h-28 md:min-h-32 select-none relative overflow-hidden">
                   <div className="absolute right-[-10px] top-[-10px] opacity-10">
                     <span className="material-symbols-outlined text-[96px]">finance</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/70 uppercase tracking-wider">Business Worth</span>
-                    <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Portfolio Valuation</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-white/80 uppercase tracking-wider">Business Worth</span>
+                    <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Everything</span>
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold font-display tracking-tight leading-none">
-                      GH₵{dynamicBusinessWorth.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      GH₵{formatMoney(dynamicBusinessWorth)}
                     </h3>
-                    <p className="text-[10px] text-white/60 mt-1">Capital + Profit Wallet + Inventory Assets</p>
+                    <p className="text-[11px] text-white/75 mt-1">Business money + Profit + Bank + Stock</p>
                   </div>
                 </div>
 
-                {/* 2. Inventory Value */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Inventory Value</span>
-                    <span className="bg-success-container/10 text-success text-[10px] font-bold px-2 py-0.5 rounded-full">At Cost</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      GH₵{dynamicInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Total items in warehouse: {totalProductsInStock}</p>
-                  </div>
-                </div>
-
-                {/* 3. Capital Cash */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Capital Cash</span>
-                    <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">Purchase Funds</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Cash reserved for bulk stock manifests</p>
-                  </div>
-                </div>
-
-                {/* 4. Profit Wallet */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Profit Wallet</span>
-                    <span className="bg-success-container text-on-success-container text-[10px] font-bold px-2 py-0.5 rounded-full">Net Margin</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      GH₵{wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Available for withdrawals/reinvestments</p>
-                  </div>
-                </div>
-
-                {/* 5. Cash Available */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Cash Available</span>
-                    <span className="bg-outline-variant/30 text-on-surface text-[10px] font-bold px-2 py-0.5 rounded-full">Liquid Capital</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      GH₵{(wallet.capitalCash + wallet.profitWallet).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Sum of Capital Cash and Profit Wallet</p>
-                  </div>
-                </div>
-
-                {/* 6. Products In Stock */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Stock Units</span>
-                    <span className="bg-warning-container text-on-warning-container text-[10px] font-bold px-2 py-0.5 rounded-full">Warehouse count</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      {totalProductsInStock}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Unique item categories tracked: {products.length}</p>
-                  </div>
-                </div>
-
-                {/* 7. Products Sold */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Products Sold</span>
-                    <span className="bg-outline-variant/30 text-on-surface text-[10px] font-bold px-2 py-0.5 rounded-full">Life-time</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      {totalProductsSold} <span className="text-xs font-normal text-outline">units</span>
-                    </h3>
-                    <div className="text-[9px] text-on-surface-variant mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 font-medium border-t border-outline-variant/20 pt-1.5">
-                      <span>Cost: <strong className="text-on-surface font-semibold">GH₵{totalSalesCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
-                      <span className="text-outline-variant/60">|</span>
-                      <span>Rev: <strong className="text-success font-semibold">GH₵{totalSalesRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></span>
+                {[
+                  {
+                    label: "Business Money",
+                    value: `GH₵${formatMoney(wallet.capitalCash)}`,
+                    hint: "For buying stock",
+                    badge: "Capital",
+                    badgeClass: "bg-primary/10 text-primary",
+                    onClick: () => setCurrentTab("wallet")
+                  },
+                  {
+                    label: "Profit",
+                    value: `GH₵${formatMoney(wallet.profitWallet)}`,
+                    hint: "What you gained from sales",
+                    badge: "Net Margin",
+                    badgeClass: "bg-success-container text-on-success-container",
+                    onClick: () => setCurrentTab("wallet")
+                  },
+                  {
+                    label: "In the Bank",
+                    value: `GH₵${formatMoney(bankTotals.inBank)}`,
+                    hint: "Profit you moved to the bank",
+                    badge: "Saved",
+                    badgeClass: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+                    onClick: () => setCurrentTab("wallet")
+                  },
+                  {
+                    label: "Stock Value",
+                    value: `GH₵${formatMoney(dynamicInventoryValue)}`,
+                    hint: `${totalProductsInStock} items in stock`,
+                    badge: "At Cost",
+                    badgeClass: "bg-success-container/60 text-on-success-container",
+                    onClick: () => setCurrentTab("inventory")
+                  },
+                  {
+                    label: "Stock Units",
+                    value: String(totalProductsInStock),
+                    hint: `${products.length} products tracked`,
+                    badge: "Count",
+                    badgeClass: "bg-warning-container text-on-warning-container",
+                    onClick: () => setCurrentTab("inventory")
+                  },
+                  {
+                    label: "Products Sold",
+                    value: `${totalProductsSold} units`,
+                    hint: `Sales GH₵${formatMoney(totalSalesRevenue)} · Cost GH₵${formatMoney(totalSalesCost)}`,
+                    badge: "All time",
+                    badgeClass: "bg-outline-variant/30 text-on-surface",
+                    onClick: () => setCurrentTab("transactions")
+                  },
+                  {
+                    label: "Sales Today",
+                    value: `GH₵${formatMoney(dailyMetrics.revenueToday)}`,
+                    hint: "Money from sales today",
+                    badge: "Today",
+                    badgeClass: "bg-primary/10 text-primary",
+                    onClick: () => setCurrentTab("transactions")
+                  },
+                  {
+                    label: "Profit Today",
+                    value: `GH₵${formatMoney(dailyMetrics.profitToday)}`,
+                    hint: "Gain from today's sales",
+                    badge: "Today",
+                    badgeClass: "bg-success-container/60 text-on-success-container",
+                    onClick: () => setCurrentTab("transactions")
+                  }
+                ].map((card) => (
+                  <button
+                    key={card.label}
+                    type="button"
+                    onClick={card.onClick}
+                    className="text-left bg-surface-lowest p-4 md:p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between gap-3 min-h-28 md:min-h-32 min-w-0 hover:border-primary/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] md:text-xs font-semibold text-on-surface-variant uppercase tracking-wider">{card.label}</span>
+                      <span className={`hidden sm:inline text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${card.badgeClass}`}>
+                        {card.badge}
+                      </span>
                     </div>
-                  </div>
-                </div>
-
-                {/* 8. Revenue Today */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Revenue Today</span>
-                    <span className="text-xs text-primary font-bold">24hr brief</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      GH₵{dailyMetrics.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Gross sales completed today</p>
-                  </div>
-                </div>
-
-                {/* 9. Profit Today */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow flex flex-col justify-between h-32">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-outline uppercase tracking-wider">Profit Today</span>
-                    <span className="bg-success-container/10 text-success text-[10px] font-bold px-2 py-0.5 rounded-full">Net Margin</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold font-display tracking-tight leading-none text-on-surface">
-                      GH₵{dailyMetrics.profitToday.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </h3>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Real-time daily net margin earned</p>
-                  </div>
-                </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg md:text-2xl font-bold font-display tracking-tight leading-tight text-on-surface break-words">
+                        {card.value}
+                      </h3>
+                      <p className="text-[11px] text-on-surface-variant mt-1">{card.hint}</p>
+                    </div>
+                  </button>
+                ))}
 
               </div>
 
@@ -3403,14 +3664,14 @@ export default function Home() {
                   <table className="w-full text-left text-xs select-none">
                     <thead>
                       <tr className="border-b border-outline-variant/30 text-outline uppercase tracking-wider font-semibold text-[10px]">
-                        <th className="p-4 w-12 text-center">Icon</th>
-                        <th className="p-4">Product Name</th>
-                        <th className="p-4">Category</th>
-                        <th className="p-4 text-center">Available Stock</th>
-                        <th className="p-4 text-right">Cost Price</th>
-                        <th className="p-4 text-right">Selling Price</th>
-                        <th className="p-4 text-right">Inventory Worth</th>
-                        <th className="p-4 text-center">Actions</th>
+                        <th className="hidden md:table-cell p-4 w-12 text-center">Icon</th>
+                        <th className="p-3 md:p-4">Product</th>
+                        <th className="hidden md:table-cell p-4">Category</th>
+                        <th className="p-3 md:p-4 text-center">Stock</th>
+                        <th className="hidden md:table-cell p-4 text-right">Cost Price</th>
+                        <th className="p-3 md:p-4 text-right">Selling Price</th>
+                        <th className="hidden md:table-cell p-4 text-right">Inventory Worth</th>
+                        <th className="p-2 md:p-4 text-center"><span className="sr-only md:not-sr-only">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant/20">
@@ -3425,13 +3686,15 @@ export default function Home() {
                               onClick={() => setExpandedProduct(isExpanded ? null : prod.id)}
                               className="hover:bg-surface-low/30 cursor-pointer transition-colors active:bg-surface-low"
                             >
-                              <td className="p-4 text-center text-lg">{prod.image}</td>
-                              <td className="p-4 font-bold text-on-surface text-sm">
+                              <td className="hidden md:table-cell p-4 text-center text-lg">{prod.image}</td>
+                              <td className="p-3 md:p-4 font-bold text-on-surface text-sm min-w-[8rem]">
+                                <span className="md:hidden mr-1">{prod.image}</span>
                                 {prod.name}
+                                <span className="md:hidden block text-[11px] font-medium text-outline mt-0.5">{prod.category}</span>
                               </td>
-                              <td className="p-4 text-outline font-medium">{prod.category}</td>
-                              <td className="p-4 text-center">
-                                <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                              <td className="hidden md:table-cell p-4 text-outline font-medium">{prod.category}</td>
+                              <td className="p-3 md:p-4 text-center">
+                                <span className={`px-2 py-0.5 rounded-full whitespace-nowrap font-bold text-[10px] ${
                                   totalQty <= 3 
                                     ? "bg-error-container text-on-error-container"
                                     : totalQty <= 8 
@@ -3441,10 +3704,10 @@ export default function Home() {
                                   {totalQty} Units
                                 </span>
                               </td>
-                              <td className="p-4 text-right font-medium text-on-surface-variant">GH₵{prod.costPrice.toFixed(2)}</td>
-                              <td className="p-4 text-right font-bold text-on-surface">GH₵{prod.sellingPrice.toFixed(2)}</td>
-                              <td className="p-4 text-right font-bold text-primary">GH₵{worthVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                              <td className="p-4 text-center">
+                              <td className="hidden md:table-cell p-4 text-right font-medium text-on-surface-variant">GH₵{prod.costPrice.toFixed(2)}</td>
+                              <td className="p-3 md:p-4 text-right font-bold text-on-surface whitespace-nowrap">GH₵{prod.sellingPrice.toFixed(2)}</td>
+                              <td className="hidden md:table-cell p-4 text-right font-bold text-primary">GH₵{worthVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                              <td className="p-2 md:p-4 text-center">
                                 <button className="p-1 rounded-full hover:bg-surface-low/80 text-outline hover:text-on-surface">
                                   <span className="material-symbols-outlined text-[20px] transition-transform duration-200" style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>
                                     expand_more
@@ -3528,7 +3791,7 @@ export default function Home() {
                                       </button>
                                       <button
                                         onClick={() => {
-                                          setSaleProductSelect(prod.id);
+                                          selectSaleProduct(prod.id);
                                           setCurrentTab("sales");
                                         }}
                                         className="px-3.5 py-1.5 rounded-xl border border-outline-variant/80 text-on-surface text-xs font-semibold hover:bg-surface-low transition-all active:scale-[0.98]"
@@ -3895,7 +4158,7 @@ export default function Home() {
                         required
                         className="w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none transition-all text-on-surface"
                         value={saleProductSelect}
-                        onChange={(e) => setSaleProductSelect(e.target.value)}
+                        onChange={(e) => selectSaleProduct(e.target.value)}
                       >
                         <option value="">-- Choose Product --</option>
                         {products.map((p) => (
@@ -4291,7 +4554,7 @@ export default function Home() {
                       <button
                         key={metric.id}
                         onClick={() => {
-                          setActiveReportMetric(metric.id as any);
+                          setActiveReportMetric(metric.id as typeof activeReportMetric);
                           setHoveredDataIndex(null);
                         }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
@@ -4446,171 +4709,401 @@ export default function Home() {
               ========================================== */}
           {currentTab === "wallet" && (
             <div className="space-y-6">
-              
+
               <div>
                 <h2 className="text-2xl font-bold font-headline-lg tracking-tight text-on-surface">
-                  Financial Capital Portfolios
+                  Money
                 </h2>
                 <p className="text-sm text-on-surface-variant font-body-md">
-                  Inject capital to fund inventory, withdraw net sales earnings, or reinvest profits back.
+                  See where your money is, put profit in the bank, or take money out.
                 </p>
               </div>
 
-              {/* Wallet balances layout */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
-                
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
-                  <span className="text-[10px] uppercase font-bold text-outline">Capital Cash</span>
-                  <p className="text-xl font-bold font-display text-primary mt-1">
-                    GH₵{wallet.capitalCash.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[9px] text-outline mt-1">Used to purchase inventory stock</p>
-                </div>
-
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
-                  <span className="text-[10px] uppercase font-bold text-outline">Profit Wallet</span>
-                  <p className="text-xl font-bold font-display text-success mt-1">
-                    GH₵{wallet.profitWallet.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[9px] text-outline mt-1">Earned margin from sales</p>
-                </div>
-
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
-                  <span className="text-[10px] uppercase font-bold text-outline">Inventory Stock Value</span>
-                  <p className="text-xl font-bold font-display text-on-surface mt-1">
-                    GH₵{dynamicInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[9px] text-outline mt-1">Warehouse items valuation at cost</p>
-                </div>
-
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-5 rounded-2xl border border-outline-variant/30 premium-shadow">
-                  <span className="text-[10px] uppercase font-bold text-outline">Business Worth</span>
-                  <p className="text-xl font-bold font-display text-on-surface mt-1">
-                    GH₵{dynamicBusinessWorth.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[9px] text-outline mt-1">Capital + Profit + Inventory worth</p>
-                </div>
-
+              {/* Balances */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 animate-fade-in">
+                {[
+                  { label: "Business Money", value: wallet.capitalCash, hint: "For buying stock", icon: "storefront", tone: "text-primary" },
+                  { label: "Profit", value: wallet.profitWallet, hint: "What you gained", icon: "savings", tone: "text-success" },
+                  { label: "In the Bank", value: bankTotals.inBank, hint: "Profit you banked", icon: "account_balance", tone: "text-sky-600 dark:text-sky-400" },
+                  { label: "Stock Value", value: dynamicInventoryValue, hint: "Goods at cost price", icon: "inventory_2", tone: "text-on-surface" }
+                ].map((card) => (
+                  <div
+                    key={card.label}
+                    className="bg-surface-lowest p-4 md:p-5 rounded-2xl border border-outline-variant/30 premium-shadow min-w-0"
+                  >
+                    <div className="flex items-center gap-1.5 text-on-surface-variant">
+                      <span className={`material-symbols-outlined text-[18px] ${card.tone}`}>{card.icon}</span>
+                      <span className="text-xs font-bold">{card.label}</span>
+                    </div>
+                    <p className={`text-lg md:text-xl font-bold font-display mt-2 break-words ${card.tone}`}>
+                      GH₵{formatMoney(card.value)}
+                    </p>
+                    <p className="text-[11px] text-on-surface-variant mt-0.5">{card.hint}</p>
+                  </div>
+                ))}
               </div>
 
-              {/* Banked profit journal — record-only, grouped by month */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-primary/5 border border-primary/15 text-sm">
+                <span className="text-on-surface-variant font-semibold">Everything together (business worth)</span>
+                <span className="font-bold font-display text-on-surface">GH₵{formatMoney(dynamicBusinessWorth)}</span>
+              </div>
 
-                {/* Entry form */}
-                <div className="lg:col-span-5 bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
-                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[18px] text-blue-600">account_balance</span>
-                    Log Profit Banked
-                  </h4>
+              {/* Main actions */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 items-start">
 
-                  <form onSubmit={handleRecordProfitDeposit} className="space-y-4">
+                {/* 1. Move money to bank */}
+                <form
+                  onSubmit={handleMoveToBank}
+                  className="bg-surface-lowest p-5 md:p-6 rounded-3xl border-2 border-sky-500/30 premium-shadow space-y-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-11 h-11 rounded-2xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-[24px]">account_balance</span>
+                    </span>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Amount Placed in Bank (GH₵)
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min="0.01"
-                        step="0.01"
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                        placeholder="1200.00"
-                        value={depositAmount}
-                        onChange={(e) => setDepositAmount(e.target.value)}
-                      />
+                      <h3 className="text-base font-bold text-on-surface">Move Money to Bank</h3>
+                      <p className="text-xs text-on-surface-variant">Comes out of your profit only</p>
                     </div>
+                  </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1.5">How much? (GH₵)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      required
+                      min="0.01"
+                      step="0.01"
+                      className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface-low focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-base font-semibold outline-none text-on-surface"
+                      placeholder="0.00"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                    />
+                    <p className="text-xs text-on-surface-variant mt-1.5">
+                      Profit you have: <strong className="text-success">GH₵{formatMoney(wallet.profitWallet)}</strong>
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Date Banked
-                      </label>
+                      <label className="block text-xs font-bold text-on-surface-variant mb-1.5">Date</label>
                       <input
                         type="date"
                         required
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
+                        className="w-full px-3 py-3 rounded-xl border border-outline-variant bg-surface-low focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-sm outline-none text-on-surface"
                         value={depositDate}
                         onChange={(e) => setDepositDate(e.target.value)}
                       />
-                      <p className="text-[9px] text-outline mt-1">Sets which month the entry is filed under.</p>
                     </div>
-
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Note (Optional)
-                      </label>
+                      <label className="block text-xs font-bold text-on-surface-variant mb-1.5">Note (optional)</label>
                       <input
                         type="text"
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                        placeholder="Momo cash-out, Fidelity acct..."
+                        className="w-full px-3 py-3 rounded-xl border border-outline-variant bg-surface-low focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-sm outline-none text-on-surface"
+                        placeholder="Momo, GCB..."
                         value={depositNote}
                         onChange={(e) => setDepositNote(e.target.value)}
                       />
                     </div>
+                  </div>
 
-                    <p className="text-[11px] text-on-surface-variant font-body-md leading-relaxed bg-surface-low/40 dark:bg-surface-low/10 p-3 rounded-xl border border-outline-variant/20">
-                      <strong>Record only.</strong> This just writes the figure into your ledger against the month you pick. It does <strong>not</strong> deduct from Capital Cash, and it does not change your Profit Wallet.
-                    </p>
+                  <button
+                    type="submit"
+                    disabled={isLoadingDB}
+                    className="w-full py-3.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white text-sm font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">account_balance</span>
+                    Move to Bank
+                  </button>
+                </form>
 
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all active:scale-[0.98]"
-                    >
-                      Record Bank Deposit
-                    </button>
-                  </form>
-                </div>
-
-                {/* Monthly calendar rollup */}
-                <div className="lg:col-span-7 bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
-                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center justify-between">
-                    Profit Banked by Month
-                    <span className="text-xs text-outline font-bold">
-                      Total: GH₵{totalProfitBanked.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                {/* 2. Take money out */}
+                <form
+                  onSubmit={handleTakeMoney}
+                  className="bg-surface-lowest p-5 md:p-6 rounded-3xl border-2 border-amber-500/30 premium-shadow space-y-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-[24px]">shopping_basket</span>
                     </span>
+                    <div>
+                      <h3 className="text-base font-bold text-on-surface">Take Money Out</h3>
+                      <p className="text-xs text-on-surface-variant">Business money first, then profit</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1.5">What is it for?</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { id: "Market", icon: "shopping_cart" },
+                        { id: "Transport", icon: "local_taxi" },
+                        { id: "Personal", icon: "person" },
+                        { id: "Other", icon: "more_horiz" }
+                      ].map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setTakeReason(r.id)}
+                          aria-pressed={takeReason === r.id}
+                          className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-bold transition-all ${
+                            takeReason === r.id
+                              ? "bg-amber-500 border-amber-500 text-white"
+                              : "border-outline-variant/50 text-on-surface-variant hover:bg-surface-low"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">{r.icon}</span>
+                          {r.id}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1.5">How much? (GH₵)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      required
+                      min="0.01"
+                      step="0.01"
+                      className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface-low focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-base font-semibold outline-none text-on-surface"
+                      placeholder="0.00"
+                      value={takeAmount}
+                      onChange={(e) => setTakeAmount(e.target.value)}
+                    />
+                  </div>
+
+                  <input
+                    type="text"
+                    className="w-full px-3 py-3 rounded-xl border border-outline-variant bg-surface-low focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-sm outline-none text-on-surface"
+                    placeholder="Note (optional) e.g. Kantamanto trip"
+                    value={takeNote}
+                    onChange={(e) => setTakeNote(e.target.value)}
+                  />
+
+                  {/* Live preview of where the money will come from */}
+                  {(() => {
+                    const amount = parseFloat(takeAmount);
+                    if (isNaN(amount) || amount <= 0) return null;
+                    const { fromCapital, fromProfit, short } = splitMoneyOut(amount);
+                    if (short > 0.005) {
+                      return (
+                        <div className="p-3 rounded-xl bg-error/10 border border-error/25 text-error text-xs font-semibold">
+                          Not enough money. You have GH₵{formatMoney(fromCapital + fromProfit)} in total.
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="p-3 rounded-xl bg-surface-low border border-outline-variant/30 text-xs space-y-1">
+                        <p className="font-bold text-on-surface">This money will come from:</p>
+                        <p className="flex justify-between text-on-surface-variant">
+                          <span>Business money</span>
+                          <strong className="text-on-surface">GH₵{formatMoney(fromCapital)}</strong>
+                        </p>
+                        <p className="flex justify-between text-on-surface-variant">
+                          <span>Profit</span>
+                          <strong className="text-on-surface">GH₵{formatMoney(fromProfit)}</strong>
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  <button
+                    type="submit"
+                    disabled={isLoadingDB}
+                    className="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-sm font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">payments</span>
+                    Take Money
+                  </button>
+                </form>
+
+                {/* 3. Add money to business */}
+                <form
+                  onSubmit={handleInjectCapital}
+                  className="bg-surface-lowest p-5 md:p-6 rounded-3xl border-2 border-primary/25 premium-shadow space-y-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-11 h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-[24px]">add_card</span>
+                    </span>
+                    <div>
+                      <h3 className="text-base font-bold text-on-surface">Add Money to Business</h3>
+                      <p className="text-xs text-on-surface-variant">Your own money put in to buy stock</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1.5">How much? (GH₵)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      required
+                      min="1"
+                      step="0.01"
+                      className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-base font-semibold outline-none text-on-surface"
+                      placeholder="0.00"
+                      value={injectAmount}
+                      onChange={(e) => setInjectAmount(e.target.value)}
+                    />
+                    <p className="text-xs text-on-surface-variant mt-1.5">
+                      It is added to <strong>Business Money</strong>.
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoadingDB}
+                    className="w-full py-3.5 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">add</span>
+                    Add Money
+                  </button>
+                </form>
+              </div>
+
+              {/* History */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 items-start">
+
+                {/* Bank history, grouped by month, with edit/delete */}
+                <div className="bg-surface-lowest p-4 md:p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4 min-w-0">
+                  <h4 className="text-sm font-bold text-on-surface flex items-center justify-between gap-2 border-b border-outline-variant/30 pb-3">
+                    <span className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px] text-sky-600 dark:text-sky-400">account_balance</span>
+                      Money in Bank
+                    </span>
+                    <span className="text-sky-600 dark:text-sky-400">GH₵{formatMoney(bankTotals.inBank)}</span>
                   </h4>
 
-                  {depositsByMonth.length === 0 ? (
-                    <div className="py-12 text-center text-outline text-xs">
-                      No bank deposits logged yet. Enter an amount on the left and it will appear here under its month.
+                  {oldBankRecords.length > 0 && (
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                      <p className="text-sm text-on-surface">
+                        <strong>{oldBankRecords.length} old {oldBankRecords.length === 1 ? "record" : "records"}</strong>{" "}
+                        (GH₵{formatMoney(oldBankRecords.reduce((acc, tx) => acc + tx.amount, 0))}) did not take money from your profit.
+                      </p>
+                      <p className="text-xs text-on-surface-variant">
+                        Did you already take this money out of profit yourself? Tap the button. Your profit will not go down again.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkDepositsDeducted(oldBankRecords)}
+                        disabled={isLoadingDB}
+                        className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-sm font-bold flex items-center justify-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                        Yes, I already took it from profit
+                      </button>
                     </div>
+                  )}
+
+                  {depositsByMonth.length === 0 ? (
+                    <p className="py-10 text-center text-on-surface-variant text-sm">
+                      Nothing in the bank yet. Use <strong>Move to Bank</strong> above.
+                    </p>
                   ) : (
-                    <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
                       {depositsByMonth.map((month) => (
-                        <div
-                          key={month.key}
-                          className="rounded-2xl border border-outline-variant/25 bg-surface-low/40 dark:bg-surface-low/10 overflow-hidden"
-                        >
-                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-outline-variant/20">
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[16px] text-outline">calendar_month</span>
-                              <span className="text-xs font-bold text-on-surface">{month.label}</span>
-                              <span className="text-[9px] text-outline font-semibold">
-                                {month.entries.length} {month.entries.length === 1 ? "entry" : "entries"}
-                              </span>
-                            </div>
-                            <span className="text-sm font-bold font-display text-success">
-                              GH₵{month.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        <div key={month.key} className="rounded-2xl border border-outline-variant/25 overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-surface-low/60 border-b border-outline-variant/20">
+                            <span className="text-xs font-bold text-on-surface">{month.label}</span>
+                            <span className="text-sm font-bold font-display text-sky-600 dark:text-sky-400">
+                              GH₵{formatMoney(month.total)}
                             </span>
                           </div>
-
                           <div className="divide-y divide-outline-variant/15">
-                            {month.entries.map((entry) => (
-                              <div key={entry.id} className="flex items-center justify-between px-4 py-2 text-xs">
-                                <div className="min-w-0">
-                                  <p className="text-on-surface font-semibold">
-                                    {new Date(entry.date).toLocaleDateString("en-US", {
-                                      weekday: "short",
-                                      month: "short",
-                                      day: "numeric"
-                                    })}
-                                  </p>
-                                  <p className="text-[10px] text-outline truncate">{entry.description}</p>
+                            {month.entries.map((entry) =>
+                              editingDepositId === entry.id ? (
+                                <div key={entry.id} className="p-3 space-y-2 bg-sky-500/5">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0.01"
+                                      step="0.01"
+                                      aria-label="Amount"
+                                      className="w-full px-3 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm font-semibold outline-none text-on-surface focus:border-sky-500"
+                                      value={editDepositAmount}
+                                      onChange={(e) => setEditDepositAmount(e.target.value)}
+                                    />
+                                    <input
+                                      type="date"
+                                      aria-label="Date"
+                                      className="w-full px-2 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm outline-none text-on-surface focus:border-sky-500"
+                                      value={editDepositDate}
+                                      onChange={(e) => setEditDepositDate(e.target.value)}
+                                    />
+                                  </div>
+                                  <input
+                                    type="text"
+                                    aria-label="Note"
+                                    placeholder="Note (optional)"
+                                    className="w-full px-3 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm outline-none text-on-surface focus:border-sky-500"
+                                    value={editDepositNote}
+                                    onChange={(e) => setEditDepositNote(e.target.value)}
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveDepositEdit(entry)}
+                                      disabled={isLoadingDB}
+                                      className="flex-1 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white text-xs font-bold"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingDepositId(null)}
+                                      className="flex-1 py-2.5 rounded-lg border border-outline-variant text-on-surface text-xs font-bold hover:bg-surface-low"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
                                 </div>
-                                <span className="font-bold text-on-surface whitespace-nowrap ml-3">
-                                  GH₵{entry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                            ))}
+                              ) : (
+                                <div key={entry.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-on-surface">
+                                      GH₵{formatMoney(entry.amount)}
+                                      <span className="ml-2 text-xs font-medium text-on-surface-variant">
+                                        {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                      </span>
+                                    </p>
+                                    <p className="text-[11px] text-on-surface-variant truncate">
+                                      {entry.profit === undefined ? "Old record (profit not reduced)" : entry.description}
+                                    </p>
+                                    {entry.profit === undefined && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMarkDepositsDeducted([entry])}
+                                        disabled={isLoadingDB}
+                                        className="mt-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 underline underline-offset-2"
+                                      >
+                                        I already took this from profit
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditDeposit(entry)}
+                                      aria-label="Edit bank entry"
+                                      className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-low hover:text-primary"
+                                    >
+                                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteDeposit(entry)}
+                                      aria-label="Delete bank entry"
+                                      className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error"
+                                    >
+                                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            )}
                           </div>
                         </div>
                       ))}
@@ -4618,100 +5111,72 @@ export default function Home() {
                   )}
                 </div>
 
-              </div>
-
-              {/* Action columns grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                
-                {/* 1. Inject capital */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
-                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2">
-                    Inject Startup Capital
-                  </h4>
-                  
-                  <form onSubmit={handleInjectCapital} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Amount to Invest (GH₵)
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        step="0.01"
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                        placeholder="5000.00"
-                        value={injectAmount}
-                        onChange={(e) => setInjectAmount(e.target.value)}
-                      />
-                    </div>
-                    
-                    <p className="text-[11px] text-on-surface-variant font-body-md leading-relaxed">
-                      Inject capital cash directly to kick off stock intakes. Added amounts will increment the <strong>Capital Cash</strong> wallet and register an <i>Investment</i> transaction.
-                    </p>
-
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all active:scale-[0.98]"
-                    >
-                      Inject Cash Capital
-                    </button>
-                  </form>
-                </div>
-
-                {/* 2. Withdraw profit */}
-                <div className="bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
-                  <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center justify-between">
-                    Withdraw Profits
-                    <span className="text-xs text-outline font-bold">
-                      Paid: GH₵{wallet.profitWithdrawn.toLocaleString()}
+                {/* Money taken out */}
+                <div className="bg-surface-lowest p-4 md:p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4 min-w-0">
+                  <h4 className="text-sm font-bold text-on-surface flex items-center justify-between gap-2 border-b border-outline-variant/30 pb-3">
+                    <span className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px] text-amber-600 dark:text-amber-400">shopping_basket</span>
+                      Money Taken Out
                     </span>
                   </h4>
 
-                  <form onSubmit={handleWithdraw} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Amount to Withdraw (GH₵)
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        step="0.01"
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                        placeholder="500.00"
-                        value={withdrawAmount}
-                        onChange={(e) => setWithdrawAmount(e.target.value)}
-                      />
+                  {moneyOutEntries.length === 0 ? (
+                    <p className="py-10 text-center text-on-surface-variant text-sm">
+                      No money taken out yet.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-outline-variant/15 max-h-[28rem] overflow-y-auto pr-1">
+                      {moneyOutEntries.map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between gap-2 py-2.5">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-on-surface">
+                              GH₵{formatMoney(Math.abs(entry.amount))}
+                              <span className="ml-2 text-xs font-medium text-on-surface-variant">
+                                {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-on-surface-variant truncate">{entry.description}</p>
+                            {entry.cost !== undefined && (
+                              <p className="text-[10px] text-outline">
+                                Business money GH₵{formatMoney(entry.cost)} · Profit GH₵{formatMoney(entry.profit ?? 0)}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMoneyOut(entry)}
+                            aria-label="Delete entry"
+                            className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
+                      ))}
                     </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-outline mb-1">
-                        Destination Bank Account
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-low dark:bg-surface-low focus:border-primary focus:ring-1 focus:ring-primary text-xs outline-none text-on-surface"
-                        placeholder="Chase Business Account (...1234)"
-                        value={withdrawBank}
-                        onChange={(e) => setWithdrawBank(e.target.value)}
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-all active:scale-[0.98]"
-                    >
-                      Confirm Withdrawal
-                    </button>
-                  </form>
+                  )}
                 </div>
+              </div>
 
+              {/* Less common tools */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowMoreMoneyTools((v) => !v)}
+                  aria-expanded={showMoreMoneyTools}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-on-surface-variant hover:text-on-surface py-2"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {showMoreMoneyTools ? "expand_less" : "expand_more"}
+                  </span>
+                  More options (move profit to business money, fix balances)
+                </button>
+
+                {showMoreMoneyTools && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-3">
                 {/* 3. Reinvest profits */}
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow space-y-4">
                   <h4 className="text-sm font-bold text-on-surface uppercase tracking-wider border-b border-outline-variant/30 pb-2 flex items-center justify-between">
-                    Reinvest Profits
+                    Move Profit to Business Money
                     <span className="text-xs text-outline font-bold">
                       Reinvested: GH₵{wallet.profitReinvested.toLocaleString()}
                     </span>
@@ -4808,21 +5273,9 @@ export default function Home() {
                     </button>
                   </form>
                 </div>
-
+                  </div>
+                )}
               </div>
-
-              {walletAlert && (
-                <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border max-w-lg mx-auto ${
-                  walletAlert.type === "success" 
-                    ? "bg-success-container/10 border-success/20 text-success" 
-                    : "bg-error-container/10 border-error/20 text-error"
-                }`}>
-                  <span className="material-symbols-outlined text-[18px]">
-                    {walletAlert.type === "success" ? "check_circle" : "error"}
-                  </span>
-                  <p className="font-semibold">{walletAlert.msg}</p>
-                </div>
-              )}
 
             </div>
           )}
@@ -4878,8 +5331,38 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Ledger Table */}
-              <div className="bg-surface-lowest dark:bg-surface-lowest rounded-3xl border border-outline-variant/30 overflow-hidden premium-shadow animate-fade-in">
+              {/* Ledger — card list on phones */}
+              <div className="md:hidden bg-surface-lowest rounded-3xl border border-outline-variant/30 premium-shadow divide-y divide-outline-variant/20 overflow-hidden">
+                {filteredTransactions.map((tx) => {
+                  const isIncome = tx.amount > 0;
+                  const style = txTypeStyle(tx.type);
+                  return (
+                    <div key={tx.id} className="flex items-start gap-3 p-4">
+                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${style.className}`}>
+                        <span className="material-symbols-outlined text-[18px]">{style.icon}</span>
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-bold text-on-surface">{tx.type}</p>
+                          <p className={`text-sm font-bold font-display whitespace-nowrap ${isIncome ? "text-success" : "text-on-surface"}`}>
+                            {isIncome ? "+" : tx.amount < 0 ? "-" : ""}GH₵{formatMoney(Math.abs(tx.amount))}
+                          </p>
+                        </div>
+                        <p className="text-xs text-on-surface-variant mt-0.5 break-words">{tx.description}</p>
+                        <p className="text-[11px] text-outline mt-1">
+                          {new Date(tx.date).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {filteredTransactions.length === 0 && (
+                  <p className="p-8 text-center text-outline text-xs">No ledger entries found matching filters.</p>
+                )}
+              </div>
+
+              {/* Ledger Table — tablets and up */}
+              <div className="hidden md:block bg-surface-lowest dark:bg-surface-lowest rounded-3xl border border-outline-variant/30 overflow-hidden premium-shadow animate-fade-in">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs font-semibold">
                     <thead>
@@ -4894,31 +5377,7 @@ export default function Home() {
                     <tbody className="divide-y divide-outline-variant/20 text-on-surface-variant">
                       {filteredTransactions.map((tx) => {
                         const isIncome = tx.amount > 0;
-                        let typeColorClass = "bg-primary/10 text-primary";
-                        let typeIcon = "info";
-
-                        if (tx.type === "Sale") {
-                          typeColorClass = "bg-success-container/10 text-success";
-                          typeIcon = "payments";
-                        } else if (tx.type === "Purchase") {
-                          typeColorClass = "bg-error-container/10 text-error";
-                          typeIcon = "shopping_bag";
-                        } else if (tx.type === "Withdrawal") {
-                          typeColorClass = "bg-warning-container text-on-warning-container";
-                          typeIcon = "logout";
-                        } else if (tx.type === "Profit Reinvestment") {
-                          typeColorClass = "bg-emerald-600/10 text-emerald-600";
-                          typeIcon = "restart_alt";
-                        } else if (tx.type === "Investment") {
-                          typeColorClass = "bg-blue-600/10 text-blue-600";
-                          typeIcon = "explore";
-                        } else if (tx.type === "Adjustment") {
-                          typeColorClass = "bg-purple-600/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400";
-                          typeIcon = "tune";
-                        } else if (tx.type === "Bank Deposit") {
-                          typeColorClass = "bg-sky-600/10 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400";
-                          typeIcon = "account_balance";
-                        }
+                        const { className: typeColorClass, icon: typeIcon } = txTypeStyle(tx.type);
 
                         return (
                           <tr key={tx.id} className="hover:bg-surface-low/30 transition-colors">
@@ -4945,7 +5404,12 @@ export default function Home() {
                               )}
                               {tx.type === "Bank Deposit" && (
                                 <div className="text-[9px] text-outline font-normal mt-0.5 font-sans">
-                                  Record only — no balance moved
+                                  {tx.profit === undefined ? "Old record — profit not reduced" : "Moved out of profit"}
+                                </div>
+                              )}
+                              {tx.type === "Withdrawal" && tx.cost !== undefined && (
+                                <div className="text-[9px] text-outline font-normal mt-0.5 font-sans">
+                                  Business money GH₵{formatMoney(tx.cost)} · Profit GH₵{formatMoney(tx.profit ?? 0)}
                                 </div>
                               )}
                             </td>
@@ -4973,9 +5437,36 @@ export default function Home() {
           )}
 
         </motion.div>
-      </AnimatePresence>
     </main>
       </div>
+
+      {/* Money result message — pinned to the bottom so it is seen on phones
+          even when the form that triggered it is scrolled off screen. */}
+      {walletAlert && currentTab === "wallet" && (
+        <div
+          role="status"
+          className={`fixed z-40 bottom-4 inset-x-4 md:left-auto md:right-6 md:max-w-md p-4 rounded-2xl text-sm flex items-start gap-2.5 border premium-shadow-lg bg-surface-lowest ${
+            walletAlert.type === "error"
+              ? "border-error/40 text-error"
+              : walletAlert.type === "info"
+                ? "border-primary/30 text-primary"
+                : "border-success/40 text-success"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px] flex-shrink-0">
+            {walletAlert.type === "error" ? "error" : walletAlert.type === "info" ? "info" : "check_circle"}
+          </span>
+          <p className="font-semibold flex-1">{walletAlert.msg}</p>
+          <button
+            type="button"
+            onClick={() => setWalletAlert(null)}
+            aria-label="Close message"
+            className="w-7 h-7 -m-1 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-low flex-shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
 
       {/* ==========================================
           MOBILE SIDEBAR (DRAWER MENU)
@@ -5118,7 +5609,7 @@ export default function Home() {
                 <div className="flex gap-2 pt-1 border-t border-outline-variant/10">
                   <button
                     onClick={handleResetData}
-                    className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium text-warning-container bg-warning-container/10 border border-warning/20 hover:bg-warning-container/20 transition-all"
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium text-on-warning-container bg-warning-container/40 border border-warning/20 hover:bg-warning-container/20 transition-all"
                   >
                     Demo Data
                   </button>

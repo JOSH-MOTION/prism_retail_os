@@ -57,6 +57,9 @@ export default function RootLayout({
       style={{ scrollBehavior: "smooth" }}
     >
       <head>
+        {/* Icon font. The root layout covers every route, and display=block is deliberate:
+            it hides raw ligature names (e.g. "dashboard") until the glyphs arrive. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font, @next/next/google-font-display */}
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
           rel="stylesheet"

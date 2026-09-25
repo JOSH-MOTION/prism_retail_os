@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Drive `dark:` utilities from the in-app theme toggle (html.dark), not the OS setting.
+   Without this, a phone in dark mode paints dark backgrounds under light-theme text. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-primary: var(--primary);
