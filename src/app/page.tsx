@@ -44,7 +44,7 @@ interface PurchaseBatch {
 interface Transaction {
   id: string;
   date: string;
-  type: "Investment" | "Purchase" | "Sale" | "Restock" | "Profit Reinvestment" | "Withdrawal" | "Adjustment" | "Bank Deposit";
+  type: "Investment" | "Purchase" | "Sale" | "Restock" | "Profit Reinvestment" | "Withdrawal" | "Adjustment" | "Bank Deposit" | "Bank Withdrawal";
   description: string;
   amount: number;
   status: "Completed" | "Pending";
@@ -483,6 +483,8 @@ const txTypeStyle = (type: Transaction["type"]): { className: string; icon: stri
       return { className: "bg-purple-600/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400", icon: "tune" };
     case "Bank Deposit":
       return { className: "bg-sky-600/10 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400", icon: "account_balance" };
+    case "Bank Withdrawal":
+      return { className: "bg-sky-600/10 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300", icon: "move_up" };
     default:
       return { className: "bg-primary/10 text-primary", icon: "info" };
   }
@@ -627,6 +629,10 @@ export default function Home() {
   const [editDepositDate, setEditDepositDate] = useState("");
   const [editDepositNote, setEditDepositNote] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
+  const [showBankOut, setShowBankOut] = useState(false);
+  const [bankOutAmount, setBankOutAmount] = useState("");
+  const [bankOutDest, setBankOutDest] = useState<"Profit" | "Business Money" | "Spent">("Profit");
+  const [bankOutNote, setBankOutNote] = useState("");
   const [depositNote, setDepositNote] = useState("");
   const [depositDate, setDepositDate] = useState(() => new Date().toISOString().split("T")[0]);
 
@@ -947,9 +953,10 @@ export default function Home() {
     }, 0);
   }, [products]);
 
-  // Money in the bank is the sum of all bank entries. Only the part that was
-  // actually taken out of profit is added to business worth, since older
-  // record-only entries are still counted inside the Profit Wallet.
+  // Money in the bank = deposits minus withdrawals (withdrawals are stored as
+  // negative amounts). Only deposits that actually came out of profit count
+  // toward business worth, since older record-only entries are still counted
+  // inside the Profit Wallet.
   const bankTotals = useMemo(() => {
     let inBank = 0;
     let movedFromProfit = 0;
@@ -957,9 +964,12 @@ export default function Home() {
       if (tx.type === "Bank Deposit") {
         inBank += tx.amount;
         movedFromProfit += tx.profit ?? 0;
+      } else if (tx.type === "Bank Withdrawal") {
+        inBank += tx.amount;
+        movedFromProfit += tx.amount;
       }
     });
-    return { inBank, movedFromProfit };
+    return { inBank, movedFromProfit: Math.max(movedFromProfit, 0) };
   }, [transactions]);
 
   // Bank entries from before "Move to Bank" existed; they never reduced profit.
@@ -1836,6 +1846,93 @@ export default function Home() {
     );
   };
 
+  // Take Money Out of Bank. The destination is stored on the entry so a delete
+  // can undo it: profit = amount returned to Profit, cost = amount returned to
+  // Business Money; "Spent" returns nothing.
+  const handleBankWithdrawal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWalletAlert(null);
+
+    const amount = parseFloat(bankOutAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setWalletAlert({ type: "error", msg: "Type how much you are taking out of the bank." });
+      return;
+    }
+    if (amount > bankTotals.inBank + 0.005) {
+      setWalletAlert({
+        type: "error",
+        msg: `Not enough in the bank. You only have GH₵${formatMoney(bankTotals.inBank)} there.`
+      });
+      return;
+    }
+
+    const toProfit = bankOutDest === "Profit" ? amount : 0;
+    const toCapital = bankOutDest === "Business Money" ? amount : 0;
+    const where = bankOutDest === "Spent" ? "spent" : `to ${bankOutDest}`;
+    const description = bankOutNote.trim()
+      ? `Took money out of bank (${where}) — ${bankOutNote.trim()}`
+      : `Took money out of bank (${where})`;
+
+    const newTx: Transaction = {
+      id: `tx-${Date.now()}`,
+      date: new Date().toISOString(),
+      type: "Bank Withdrawal",
+      description,
+      amount: -amount,
+      status: "Completed",
+      profit: toProfit,
+      cost: toCapital
+    };
+
+    const ok = await commitMoneyChange(
+      { ...wallet, profitWallet: wallet.profitWallet + toProfit, capitalCash: wallet.capitalCash + toCapital },
+      [newTx, ...transactions],
+      () =>
+        supabase!.from("transactions").insert([
+          {
+            user_id: activeUserId,
+            type: "Bank Withdrawal",
+            description,
+            amount: -amount,
+            status: "Completed",
+            profit: toProfit,
+            cost: toCapital
+          }
+        ]),
+      bankOutDest === "Spent"
+        ? `Took GH₵${formatMoney(amount)} out of the bank.`
+        : `Moved GH₵${formatMoney(amount)} from the bank to ${bankOutDest}.`
+    );
+    if (ok) {
+      setBankOutAmount("");
+      setBankOutNote("");
+      setShowBankOut(false);
+    }
+  };
+
+  const handleDeleteBankWithdrawal = async (tx: Transaction) => {
+    const fromProfit = tx.profit ?? 0;
+    const fromCapital = tx.cost ?? 0;
+    if (fromProfit > wallet.profitWallet + 0.005 || fromCapital > wallet.capitalCash + 0.005) {
+      setWalletAlert({
+        type: "error",
+        msg: "Can't undo this: the money it added has already been used."
+      });
+      return;
+    }
+    const confirmed = window.confirm(
+      `Delete this entry? GH₵${formatMoney(Math.abs(tx.amount))} will go back into the bank.`
+    );
+    if (!confirmed) return;
+
+    await commitMoneyChange(
+      { ...wallet, profitWallet: wallet.profitWallet - fromProfit, capitalCash: wallet.capitalCash - fromCapital },
+      transactions.filter((t) => t.id !== tx.id),
+      () => supabase!.from("transactions").delete().eq("id", tx.id),
+      `Entry deleted. GH₵${formatMoney(Math.abs(tx.amount))} is back in the bank.`
+    );
+  };
+
   const handleDeleteDeposit = async (tx: Transaction) => {
     const refund = tx.profit ?? 0;
     const confirmed = window.confirm(
@@ -2670,7 +2767,7 @@ export default function Home() {
     const buckets = new Map<string, { key: string; label: string; total: number; entries: Transaction[] }>();
 
     transactions
-      .filter((tx) => tx.type === "Bank Deposit")
+      .filter((tx) => tx.type === "Bank Deposit" || tx.type === "Bank Withdrawal")
       .forEach((tx) => {
         const d = new Date(tx.date);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -4976,6 +5073,94 @@ export default function Home() {
                     <span className="text-sky-600 dark:text-sky-400">GH₵{formatMoney(bankTotals.inBank)}</span>
                   </h4>
 
+                  {!showBankOut ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBankOut(true);
+                        setWalletAlert(null);
+                      }}
+                      disabled={bankTotals.inBank <= 0}
+                      className="w-full py-3 rounded-xl border-2 border-sky-600/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold flex items-center justify-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">move_up</span>
+                      Take Money Out of Bank
+                    </button>
+                  ) : (
+                    <form onSubmit={handleBankWithdrawal} className="p-4 rounded-2xl bg-sky-500/5 border border-sky-500/30 space-y-3">
+                      <p className="text-sm font-bold text-on-surface">Take Money Out of Bank</p>
+                      <div>
+                        <label className="block text-xs font-bold text-on-surface-variant mb-1.5">Where is the money going?</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { id: "Profit" as const, icon: "savings", label: "Back to Profit" },
+                            { id: "Business Money" as const, icon: "storefront", label: "Business Money" },
+                            { id: "Spent" as const, icon: "shopping_bag", label: "Spent" }
+                          ].map((d) => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => setBankOutDest(d.id)}
+                              aria-pressed={bankOutDest === d.id}
+                              className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border text-[11px] font-bold text-center transition-all ${
+                                bankOutDest === d.id
+                                  ? "bg-sky-600 border-sky-600 text-white"
+                                  : "border-outline-variant/50 text-on-surface-variant hover:bg-surface-low"
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">{d.icon}</span>
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-on-surface-variant mb-1.5">How much? (GH₵)</label>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          required
+                          min="0.01"
+                          step="0.01"
+                          className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface-lowest focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-base font-semibold outline-none text-on-surface"
+                          placeholder="0.00"
+                          value={bankOutAmount}
+                          onChange={(e) => setBankOutAmount(e.target.value)}
+                        />
+                        <p className="text-xs text-on-surface-variant mt-1.5">
+                          In the bank: <strong className="text-sky-600 dark:text-sky-400">GH₵{formatMoney(bankTotals.inBank)}</strong>
+                        </p>
+                      </div>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-3 rounded-xl border border-outline-variant bg-surface-lowest focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-sm outline-none text-on-surface"
+                        placeholder="Note (optional)"
+                        value={bankOutNote}
+                        onChange={(e) => setBankOutNote(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={isLoadingDB}
+                          className="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white text-sm font-bold"
+                        >
+                          Take Out
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowBankOut(false);
+                            setBankOutAmount("");
+                            setBankOutNote("");
+                          }}
+                          className="flex-1 py-3 rounded-xl border border-outline-variant text-on-surface text-sm font-bold hover:bg-surface-low"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
                   {oldBankRecords.length > 0 && (
                     <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
                       <p className="text-sm text-on-surface">
@@ -5063,16 +5248,18 @@ export default function Home() {
                               ) : (
                                 <div key={entry.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
                                   <div className="min-w-0">
-                                    <p className="text-sm font-bold text-on-surface">
-                                      GH₵{formatMoney(entry.amount)}
+                                    <p className={`text-sm font-bold ${entry.amount < 0 ? "text-error" : "text-on-surface"}`}>
+                                      {entry.amount < 0 ? "-" : ""}GH₵{formatMoney(Math.abs(entry.amount))}
                                       <span className="ml-2 text-xs font-medium text-on-surface-variant">
                                         {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                       </span>
                                     </p>
                                     <p className="text-[11px] text-on-surface-variant truncate">
-                                      {entry.profit === undefined ? "Old record (profit not reduced)" : entry.description}
+                                      {entry.type === "Bank Deposit" && entry.profit === undefined
+                                        ? "Old record (profit not reduced)"
+                                        : entry.description}
                                     </p>
-                                    {entry.profit === undefined && (
+                                    {entry.type === "Bank Deposit" && entry.profit === undefined && (
                                       <button
                                         type="button"
                                         onClick={() => handleMarkDepositsDeducted([entry])}
@@ -5084,6 +5271,7 @@ export default function Home() {
                                     )}
                                   </div>
                                   <div className="flex gap-1 flex-shrink-0">
+                                    {entry.type === "Bank Deposit" && (
                                     <button
                                       type="button"
                                       onClick={() => startEditDeposit(entry)}
@@ -5092,9 +5280,12 @@ export default function Home() {
                                     >
                                       <span className="material-symbols-outlined text-[18px]">edit</span>
                                     </button>
+                                    )}
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteDeposit(entry)}
+                                      onClick={() =>
+                                        entry.type === "Bank Withdrawal" ? handleDeleteBankWithdrawal(entry) : handleDeleteDeposit(entry)
+                                      }
                                       aria-label="Delete bank entry"
                                       className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error"
                                     >
@@ -5312,7 +5503,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  {["All", "Sale", "Purchase", "Investment", "Profit Reinvestment", "Withdrawal", "Bank Deposit", "Adjustment"].map((cat) => {
+                  {["All", "Sale", "Purchase", "Investment", "Profit Reinvestment", "Withdrawal", "Bank Deposit", "Bank Withdrawal", "Adjustment"].map((cat) => {
                     const isSelected = txFilter === cat;
                     return (
                       <button
