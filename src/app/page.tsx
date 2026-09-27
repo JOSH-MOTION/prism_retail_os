@@ -490,6 +490,44 @@ const txTypeStyle = (type: Transaction["type"]): { className: string; icon: stri
   }
 };
 
+const INITIAL_STOCK_SUPPLIER = "Initial Inventory Setup";
+
+// Purchase ledger entries keep how they were paid (cost = from Business Money,
+// profit = from Profit) so fixing or deleting the stock entry can put the money
+// back where it came from. Initial stock intakes cost nothing.
+const purchaseSplitFields = (isInitial: boolean, fromCapital: number, fromProfit: number) =>
+  isInitial ? {} : { cost: fromCapital, profit: fromProfit };
+
+const purchaseDescription = (
+  productName: string,
+  qty: number,
+  supplier: string,
+  isInitial: boolean,
+  fromCapital: number,
+  fromProfit: number
+) => {
+  if (isInitial) return `Initial Stock Intake of ${productName} (${qty} units)`;
+  const fundingNote =
+    fromProfit > 0
+      ? ` — funded GH₵${fromCapital.toFixed(2)} from Capital Cash + GH₵${fromProfit.toFixed(2)} from Profit Wallet`
+      : "";
+  return `Bulk purchase Restock of ${productName} (${qty} units) from ${supplier}${fundingNote}`;
+};
+
+// Where the money for a stock entry came from. Older entries only have the
+// split written in their description, and before that it was all Business Money.
+const purchasePaidFrom = (batch: PurchaseBatch, tx: Transaction | undefined) => {
+  if (batch.supplier === INITIAL_STOCK_SUPPLIER || tx?.type === "Restock") return { fromCapital: 0, fromProfit: 0 };
+  if (!tx) return { fromCapital: batch.totalAmount, fromProfit: 0 };
+  if (tx.cost !== undefined || tx.profit !== undefined) return { fromCapital: tx.cost ?? 0, fromProfit: tx.profit ?? 0 };
+  const funded = tx.description.match(/funded GH₵([\d.]+) from Capital Cash \+ GH₵([\d.]+) from Profit Wallet/);
+  if (funded) return { fromCapital: parseFloat(funded[1]), fromProfit: parseFloat(funded[2]) };
+  return { fromCapital: Math.abs(tx.amount), fromProfit: 0 };
+};
+
+const sameVariant = (v: { color: string; size: string }, color: string, size: string) =>
+  v.color.toLowerCase() === color.toLowerCase() && v.size.toUpperCase() === size.toUpperCase();
+
 // Product icons, grouped so owners can find one by looking rather than reading.
 const PRODUCT_ICON_GROUPS: { label: string; icons: string[] }[] = [
   { label: "Clothes", icons: ["👕", "👚", "👔", "👗", "👖", "🩳", "🩲", "🧥", "🥻", "👘", "🩱", "👙", "🧦", "🧣", "🧤"] },
@@ -643,6 +681,12 @@ export default function Home() {
   const [isParsing, setIsParsing] = useState(false);
   const [parsedItems, setParsedItems] = useState<{ color: string; size: string; quantity: number }[]>([]);
   const [parsingAlert, setParsingAlert] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
+
+  // Fixing a stock entry (purchase batch) added by mistake
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [editBatchSupplier, setEditBatchSupplier] = useState("");
+  const [editBatchItems, setEditBatchItems] = useState<{ color: string; size: string; quantity: string }[]>([]);
+  const [purchaseAlert, setPurchaseAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   // Sales Page variables
   const [saleProductSelect, setSaleProductSelect] = useState("");
@@ -2142,18 +2186,12 @@ export default function Home() {
 
     const finalAmount = -chargeable;
     const finalType = bulkIsInitial ? "Restock" as const : "Purchase" as const;
-    const fundingNote =
-      fromProfit > 0
-        ? ` — funded GH₵${fromCapital.toFixed(2)} from Capital Cash + GH₵${fromProfit.toFixed(2)} from Profit Wallet`
-        : "";
-    const finalDesc = bulkIsInitial
-      ? `Initial Stock Intake of ${selectedProduct.name} (${totalQty} units)`
-      : `Bulk purchase Restock of ${selectedProduct.name} (${totalQty} units) from ${bulkSupplier}${fundingNote}`;
+    const finalDesc = purchaseDescription(selectedProduct.name, totalQty, bulkSupplier, bulkIsInitial, fromCapital, fromProfit);
 
     // 2. Prepare new records
     const newBatch: PurchaseBatch = {
       id: `pur-${Date.now()}`,
-      supplier: bulkIsInitial ? "Initial Inventory Setup" : bulkSupplier,
+      supplier: bulkIsInitial ? INITIAL_STOCK_SUPPLIER : bulkSupplier,
       date: new Date().toISOString(),
       totalQuantity: totalQty,
       totalAmount: bulkIsInitial ? 0 : totalCost,
@@ -2172,7 +2210,8 @@ export default function Home() {
       type: finalType,
       description: finalDesc,
       amount: finalAmount,
-      status: "Completed"
+      status: "Completed",
+      ...purchaseSplitFields(bulkIsInitial, fromCapital, fromProfit)
     };
 
     // Profit spent on stock counts as profit reinvested back into the business.
@@ -2214,7 +2253,9 @@ export default function Home() {
               type: finalType,
               description: finalDesc,
               amount: finalAmount,
-              status: newTx.status
+              status: newTx.status,
+              profit: newTx.profit ?? null,
+              cost: newTx.cost ?? null
             }
           ]);
         if (txErr) throw txErr;
@@ -2257,6 +2298,304 @@ export default function Home() {
     setBulkText("");
     setBulkSupplier("");
     setBulkIsInitial(false);
+  };
+
+  // ==========================================
+  // FIX OR DELETE A STOCK ENTRY (purchase batch)
+  // ==========================================
+
+  // The ledger line saved with a stock entry. They share no id, so match on the
+  // product, unit count and amount, and take the one saved closest in time.
+  const findPurchaseTx = (batch: PurchaseBatch) => {
+    const name = batch.items[0]?.name;
+    const batchTime = new Date(batch.date).getTime();
+    const candidates = transactions.filter(
+      (t) =>
+        (t.type === "Purchase" || t.type === "Restock") &&
+        Math.abs(Math.abs(t.amount) - batch.totalAmount) < 0.005 &&
+        t.description.includes(`(${batch.totalQuantity} units)`) &&
+        Math.abs(new Date(t.date).getTime() - batchTime) < 10 * 60 * 1000
+    );
+    const named = candidates.filter((t) => name && t.description.includes(`of ${name} (`));
+    const pool = named.length ? named : candidates;
+    return pool.length
+      ? pool.reduce((closest, t) =>
+          Math.abs(new Date(t.date).getTime() - batchTime) < Math.abs(new Date(closest.date).getTime() - batchTime)
+            ? t
+            : closest
+        )
+      : undefined;
+  };
+
+  // Takes the old entry's units out of stock and puts the new ones in. Colours
+  // and sizes that only existed because of this entry are removed once empty,
+  // so a typo doesn't linger on the Restock List.
+  const restockVariants = (
+    product: Product,
+    batch: PurchaseBatch,
+    newItems: { color: string; size: string; quantity: number }[]
+  ): { variants: Variant[] } | { error: string } => {
+    const next = product.variants.map((v) => ({ ...v }));
+    for (const item of batch.items) {
+      const idx = next.findIndex((v) => sameVariant(v, item.color, item.size));
+      if (idx > -1) next[idx].quantity -= item.quantity;
+    }
+    for (const item of newItems) {
+      const idx = next.findIndex((v) => sameVariant(v, item.color, item.size));
+      if (idx > -1) next[idx].quantity += item.quantity;
+      else next.push({ color: item.color, size: item.size, quantity: item.quantity });
+    }
+
+    const short = next.find((v) => v.quantity < 0);
+    if (short) {
+      const inStock = product.variants.find((v) => sameVariant(v, short.color, short.size))?.quantity ?? 0;
+      return {
+        error:
+          `Only ${inStock} ${short.color} (${short.size}) left in stock, so this can't take away ${inStock - short.quantity}. ` +
+          "Some were already sold. Delete those sales first, or keep a bigger number."
+      };
+    }
+
+    const usedElsewhere = (v: Variant) =>
+      purchases.some(
+        (b) => b.id !== batch.id && b.items.some((i) => i.name === product.name && sameVariant(v, i.color, i.size))
+      ) || sales.some((sale) => sale.productName === product.name && sameVariant(v, sale.color, sale.size));
+    const variants = next.filter(
+      (v) =>
+        v.quantity > 0 ||
+        !batch.items.some((i) => sameVariant(v, i.color, i.size)) ||
+        newItems.some((i) => sameVariant(v, i.color, i.size)) ||
+        usedElsewhere(v)
+    );
+    return { variants };
+  };
+
+  // Saves a fixed or deleted stock entry together with its stock, ledger line
+  // and wallet changes, in the cloud or locally.
+  const commitPurchaseChange = async (change: {
+    batch: PurchaseBatch;
+    nextBatch: PurchaseBatch | null;
+    product?: Product;
+    tx?: Transaction;
+    nextTx: Transaction | null;
+    nextWallet: Wallet;
+    successMsg: string;
+  }) => {
+    const { batch, nextBatch, product, tx, nextTx, nextWallet, successMsg } = change;
+
+    if (supabase && activeUserId) {
+      setIsLoadingDB(true);
+      try {
+        if (product) {
+          const { error } = await supabase.from("products").update({ variants: product.variants }).eq("id", product.id);
+          if (error) throw error;
+        }
+
+        const { error: purErr } = nextBatch
+          ? await supabase
+              .from("purchases")
+              .update({
+                supplier: nextBatch.supplier,
+                total_quantity: nextBatch.totalQuantity,
+                total_amount: nextBatch.totalAmount,
+                items: nextBatch.items
+              })
+              .eq("id", batch.id)
+          : await supabase.from("purchases").delete().eq("id", batch.id);
+        if (purErr) throw purErr;
+
+        if (tx) {
+          const { error: txErr } = nextTx
+            ? await supabase
+                .from("transactions")
+                .update({
+                  amount: nextTx.amount,
+                  description: nextTx.description,
+                  profit: nextTx.profit ?? null,
+                  cost: nextTx.cost ?? null
+                })
+                .eq("id", tx.id)
+            : await supabase.from("transactions").delete().eq("id", tx.id);
+          if (txErr) throw txErr;
+        }
+
+        const { error: wErr } = await supabase
+          .from("wallets")
+          .update({
+            capital_cash: nextWallet.capitalCash,
+            profit_wallet: nextWallet.profitWallet,
+            profit_reinvested: nextWallet.profitReinvested
+          })
+          .eq("user_id", activeUserId);
+        if (wErr) throw wErr;
+
+        await fetchUserData(activeUserId);
+        setPurchaseAlert({ type: "success", msg: successMsg });
+        return true;
+      } catch (err: unknown) {
+        setPurchaseAlert({ type: "error", msg: `Database error: ${errorMessage(err)}` });
+        return false;
+      } finally {
+        setIsLoadingDB(false);
+      }
+    }
+
+    const nextProducts = product ? products.map((p) => (p.id === product.id ? product : p)) : products;
+    const nextPurchases = nextBatch
+      ? purchases.map((b) => (b.id === batch.id ? nextBatch : b))
+      : purchases.filter((b) => b.id !== batch.id);
+    const nextTransactions = tx
+      ? nextTx
+        ? transactions.map((t) => (t.id === tx.id ? nextTx : t))
+        : transactions.filter((t) => t.id !== tx.id)
+      : transactions;
+    saveLocalState(nextProducts, nextPurchases, nextTransactions, sales, nextWallet);
+    setPurchaseAlert({ type: "success", msg: successMsg });
+    return true;
+  };
+
+  const startEditBatch = (batch: PurchaseBatch) => {
+    setEditingBatchId(batch.id);
+    setEditBatchSupplier(batch.supplier);
+    setEditBatchItems(batch.items.map((i) => ({ color: i.color, size: i.size, quantity: String(i.quantity) })));
+    setPurchaseAlert(null);
+  };
+
+  const handleSaveBatchEdit = async (batch: PurchaseBatch) => {
+    setPurchaseAlert(null);
+    const tx = findPurchaseTx(batch);
+    const isInitial = batch.supplier === INITIAL_STOCK_SUPPLIER || tx?.type === "Restock";
+    const product = products.find((p) => p.name === batch.items[0]?.name);
+    if (!product) {
+      setPurchaseAlert({ type: "error", msg: "This product was deleted, so this entry can't be changed. You can still delete it." });
+      return;
+    }
+
+    const supplier = isInitial ? batch.supplier : editBatchSupplier.trim();
+    if (!supplier) {
+      setPurchaseAlert({ type: "error", msg: "Type who you bought from." });
+      return;
+    }
+
+    const rows = editBatchItems.filter((r) => r.color.trim() || r.size.trim() || r.quantity.trim());
+    const newItems: { color: string; size: string; quantity: number }[] = [];
+    for (const row of rows) {
+      const quantity = Number(row.quantity);
+      if (!row.color.trim() || !Number.isInteger(quantity) || quantity <= 0) {
+        setPurchaseAlert({ type: "error", msg: "Every line needs a colour and a whole number above 0." });
+        return;
+      }
+      newItems.push({ color: row.color.trim(), size: row.size.trim() || "One Size", quantity });
+    }
+    if (newItems.length === 0) {
+      setPurchaseAlert({ type: "error", msg: "Keep at least one line, or delete the whole entry instead." });
+      return;
+    }
+
+    const stock = restockVariants(product, batch, newItems);
+    if ("error" in stock) {
+      setPurchaseAlert({ type: "error", msg: stock.error });
+      return;
+    }
+
+    // Put back what the old entry cost, then pay for the corrected one the
+    // same way a new restock is paid: Business Money first, then Profit.
+    const unitCost = batch.items[0]?.costPrice ?? product.costPrice;
+    const totalQty = newItems.reduce((acc, i) => acc + i.quantity, 0);
+    const totalCost = totalQty * unitCost;
+    const paid = purchasePaidFrom(batch, tx);
+    const capitalBefore = wallet.capitalCash + paid.fromCapital;
+    const profitBefore = wallet.profitWallet + paid.fromProfit;
+    const charge = isInitial ? 0 : totalCost;
+    const fromCapital = Math.min(charge, Math.max(capitalBefore, 0));
+    const fromProfit = Math.min(charge - fromCapital, Math.max(profitBefore, 0));
+    const short = charge - fromCapital - fromProfit;
+    if (short > 0.005) {
+      setPurchaseAlert({
+        type: "error",
+        msg: `Not enough money for this. It costs GH₵${formatMoney(charge)} and you are short GH₵${formatMoney(short)}.`
+      });
+      return;
+    }
+
+    const nextBatch: PurchaseBatch = {
+      ...batch,
+      supplier,
+      totalQuantity: totalQty,
+      totalAmount: charge,
+      items: newItems.map((i) => ({ name: product.name, ...i, costPrice: unitCost }))
+    };
+    const nextTx: Transaction | null = tx
+      ? {
+          ...tx,
+          amount: -charge,
+          description: purchaseDescription(product.name, totalQty, supplier, isInitial, fromCapital, fromProfit),
+          cost: undefined,
+          profit: undefined,
+          ...purchaseSplitFields(isInitial, fromCapital, fromProfit)
+        }
+      : null;
+    const nextWallet: Wallet = {
+      ...wallet,
+      capitalCash: capitalBefore - fromCapital,
+      profitWallet: profitBefore - fromProfit,
+      profitReinvested: Math.max(wallet.profitReinvested - paid.fromProfit, 0) + fromProfit
+    };
+
+    const diff = charge - (paid.fromCapital + paid.fromProfit);
+    const ok = await commitPurchaseChange({
+      batch,
+      nextBatch,
+      product: { ...product, variants: stock.variants },
+      tx,
+      nextTx,
+      nextWallet,
+      successMsg:
+        diff > 0.005
+          ? `Entry fixed. GH₵${formatMoney(diff)} more was paid for the extra stock.`
+          : diff < -0.005
+            ? `Entry fixed. GH₵${formatMoney(-diff)} went back into your money.`
+            : "Entry fixed."
+    });
+    if (ok) setEditingBatchId(null);
+  };
+
+  const handleDeleteBatch = async (batch: PurchaseBatch) => {
+    setPurchaseAlert(null);
+    const tx = findPurchaseTx(batch);
+    const product = products.find((p) => p.name === batch.items[0]?.name);
+    const paid = purchasePaidFrom(batch, tx);
+    const refund = paid.fromCapital + paid.fromProfit;
+
+    const stock = product ? restockVariants(product, batch, []) : undefined;
+    if (stock && "error" in stock) {
+      setPurchaseAlert({ type: "error", msg: stock.error });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete this entry? ${batch.totalQuantity} unit(s) of ${batch.items[0]?.name ?? "stock"} will be taken out of stock` +
+        (refund > 0.005
+          ? ` and GH₵${formatMoney(refund)} will go back (Business Money GH₵${formatMoney(paid.fromCapital)}, Profit GH₵${formatMoney(paid.fromProfit)}).`
+          : ".")
+    );
+    if (!confirmed) return;
+
+    const ok = await commitPurchaseChange({
+      batch,
+      nextBatch: null,
+      product: product && stock ? { ...product, variants: stock.variants } : undefined,
+      tx,
+      nextTx: null,
+      nextWallet: {
+        ...wallet,
+        capitalCash: wallet.capitalCash + paid.fromCapital,
+        profitWallet: wallet.profitWallet + paid.fromProfit,
+        profitReinvested: Math.max(wallet.profitReinvested - paid.fromProfit, 0)
+      },
+      successMsg: refund > 0.005 ? `Entry deleted. GH₵${formatMoney(refund)} went back into your money.` : "Entry deleted."
+    });
+    if (ok && editingBatchId === batch.id) setEditingBatchId(null);
   };
 
   // Record Sale Flow
@@ -4766,9 +5105,30 @@ export default function Home() {
                   Restock Purchases Timeline
                 </h2>
                 <p className="text-sm text-on-surface-variant font-body-md">
-                  Timeline of wholesale manifest deliveries.
+                  Timeline of wholesale manifest deliveries. Added something by mistake? Tap Edit or Delete on that entry and your stock and money update with it.
                 </p>
               </div>
+
+              {purchaseAlert && (
+                <div className={`p-4 rounded-2xl text-xs flex items-start gap-2 border ${
+                  purchaseAlert.type === "success"
+                    ? "bg-success-container/10 border-success/20 text-success"
+                    : "bg-error-container/10 border-error/20 text-error"
+                }`}>
+                  <span className="material-symbols-outlined text-[18px]">
+                    {purchaseAlert.type === "success" ? "check_circle" : "error"}
+                  </span>
+                  <p className="font-semibold flex-1">{purchaseAlert.msg}</p>
+                  <button
+                    type="button"
+                    onClick={() => setPurchaseAlert(null)}
+                    aria-label="Close message"
+                    className="material-symbols-outlined text-[18px] opacity-70 hover:opacity-100"
+                  >
+                    close
+                  </button>
+                </div>
+              )}
 
               {purchases.length === 0 ? (
                 <div className="bg-surface-lowest dark:bg-surface-lowest p-12 text-center rounded-3xl border border-outline-variant/30 text-outline text-xs">
@@ -4777,7 +5137,7 @@ export default function Home() {
               ) : (
                 <div className="relative border-l-2 border-primary/20 ml-4 pl-6 space-y-6">
                   {purchases.map((batch) => (
-                    <div key={batch.id} className="relative bg-surface-lowest dark:bg-surface-lowest p-6 rounded-3xl border border-outline-variant/30 premium-shadow">
+                    <div key={batch.id} className="relative bg-surface-lowest dark:bg-surface-lowest p-4 sm:p-6 rounded-3xl border border-outline-variant/30 premium-shadow">
                       
                       <span className="absolute left-[-32px] top-[24px] w-4 h-4 rounded-full bg-primary border-4 border-background flex items-center justify-center"></span>
                       
@@ -4789,12 +5149,143 @@ export default function Home() {
                             Manifest processed on: {new Date(batch.date).toLocaleString()}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-primary leading-tight">GH₵{batch.totalAmount.toLocaleString()}</p>
-                          <p className="text-xs font-semibold text-outline">{batch.totalQuantity} items received</p>
+                        <div className="flex items-end justify-between sm:flex-col sm:items-end gap-2">
+                          <div className="sm:text-right">
+                            <p className="text-lg font-bold text-primary leading-tight">GH₵{batch.totalAmount.toLocaleString()}</p>
+                            <p className="text-xs font-semibold text-outline">{batch.totalQuantity} items received</p>
+                          </div>
+                          {editingBatchId !== batch.id && (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEditBatch(batch)}
+                                disabled={isLoadingDB}
+                                className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-on-surface-variant border border-outline-variant/40 hover:bg-surface-low hover:text-primary text-[11px] font-semibold transition-colors disabled:opacity-40"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">edit</span>
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBatch(batch)}
+                                disabled={isLoadingDB}
+                                className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-error border border-error/20 hover:bg-error-container/10 text-[11px] font-semibold transition-colors disabled:opacity-40"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
+                      {editingBatchId === batch.id ? (
+                        <div className="mt-4 space-y-3">
+                          {batch.supplier !== INITIAL_STOCK_SUPPLIER && (
+                            <div>
+                              <label className="block text-[10px] uppercase font-bold text-outline tracking-wider mb-1">
+                                Bought from
+                              </label>
+                              <input
+                                type="text"
+                                className="w-full px-3 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm outline-none text-on-surface focus:border-primary"
+                                value={editBatchSupplier}
+                                onChange={(e) => setEditBatchSupplier(e.target.value)}
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_2.25rem] gap-1.5 mb-1 text-[10px] uppercase font-bold text-outline tracking-wider">
+                              <span>Colour</span>
+                              <span>Size</span>
+                              <span>Qty</span>
+                              <span></span>
+                            </div>
+                            <div className="space-y-2">
+                              {editBatchItems.map((row, idx) => (
+                                <div key={idx} className="grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_2.25rem] gap-1.5 items-center">
+                                  <input
+                                    type="text"
+                                    aria-label="Colour"
+                                    className="w-full min-w-0 px-3 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm outline-none text-on-surface focus:border-primary"
+                                    value={row.color}
+                                    onChange={(e) =>
+                                      setEditBatchItems((rows) => rows.map((r, i) => (i === idx ? { ...r, color: e.target.value } : r)))
+                                    }
+                                  />
+                                  <input
+                                    type="text"
+                                    aria-label="Size"
+                                    className="w-full min-w-0 px-2 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm outline-none text-on-surface focus:border-primary"
+                                    value={row.size}
+                                    onChange={(e) =>
+                                      setEditBatchItems((rows) => rows.map((r, i) => (i === idx ? { ...r, size: e.target.value } : r)))
+                                    }
+                                  />
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="1"
+                                    step="1"
+                                    aria-label="Quantity"
+                                    className="w-full min-w-0 px-2 py-2.5 rounded-lg border border-outline-variant bg-surface-lowest text-sm font-semibold outline-none text-on-surface focus:border-primary"
+                                    value={row.quantity}
+                                    onChange={(e) =>
+                                      setEditBatchItems((rows) => rows.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditBatchItems((rows) => rows.filter((_, i) => i !== idx))}
+                                    aria-label="Remove line"
+                                    className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">close</span>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditBatchItems((rows) => [...rows, { color: "", size: "", quantity: "" }])}
+                              className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">add</span>
+                              Add a line
+                            </button>
+                          </div>
+                          {(() => {
+                            const unitCost = batch.items[0]?.costPrice ?? 0;
+                            const qty = editBatchItems.reduce((acc, r) => acc + (Number(r.quantity) > 0 ? Number(r.quantity) : 0), 0);
+                            const isInitial = batch.supplier === INITIAL_STOCK_SUPPLIER;
+                            return (
+                              <p className="text-xs text-on-surface-variant">
+                                {qty} unit(s)
+                                {isInitial
+                                  ? " · starting stock, no money taken"
+                                  : ` · GH₵${formatMoney(qty * unitCost)} at GH₵${formatMoney(unitCost)} each (was GH₵${formatMoney(batch.totalAmount)})`}
+                              </p>
+                            );
+                          })()}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveBatchEdit(batch)}
+                              disabled={isLoadingDB}
+                              className="flex-1 py-2.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-xs font-bold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingBatchId(null)}
+                              className="flex-1 py-2.5 rounded-lg border border-outline-variant text-on-surface text-xs font-bold hover:bg-surface-low"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="mt-4">
                         <h5 className="text-[10px] uppercase font-bold text-outline tracking-wider mb-2">
                           Itemized Manifest Specifications
@@ -4826,6 +5317,7 @@ export default function Home() {
                           </table>
                         </div>
                       </div>
+                      )}
 
                     </div>
                   ))}
