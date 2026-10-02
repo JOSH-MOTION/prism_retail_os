@@ -2853,11 +2853,12 @@ export default function Home() {
     }
   };
 
-  // How a money-out amount would be paid: business money (capital) first,
-  // then profit for whatever capital cannot cover.
+  // How a money-out amount would be paid: profit first, since capital cash is
+  // reserved for buying products. Capital is only touched as a fallback for
+  // whatever profit cannot cover, so it can be flagged clearly in the UI.
   const splitMoneyOut = (amount: number) => {
-    const fromCapital = Math.min(amount, Math.max(wallet.capitalCash, 0));
-    const fromProfit = Math.min(amount - fromCapital, Math.max(wallet.profitWallet, 0));
+    const fromProfit = Math.min(amount, Math.max(wallet.profitWallet, 0));
+    const fromCapital = Math.min(amount - fromProfit, Math.max(wallet.capitalCash, 0));
     return { fromCapital, fromProfit, short: amount - fromCapital - fromProfit };
   };
 
@@ -2916,7 +2917,9 @@ export default function Home() {
             profit: fromProfit
           }
         ]),
-      `Took GH₵${formatMoney(amount)} for ${takeReason}.`
+      fromCapital > 0.005
+        ? `Took GH₵${formatMoney(amount)} for ${takeReason}. ⚠ Profit was short, so GH₵${formatMoney(fromCapital)} came out of business money.`
+        : `Took GH₵${formatMoney(amount)} for ${takeReason}.`
     );
     if (ok) {
       setTakeAmount("");
@@ -5647,7 +5650,7 @@ export default function Home() {
                     </span>
                     <div>
                       <h3 className="text-base font-bold text-on-surface">Take Money Out</h3>
-                      <p className="text-xs text-on-surface-variant">Business money first, then profit</p>
+                      <p className="text-xs text-on-surface-variant">From profit — business money is only used if profit runs short</p>
                     </div>
                   </div>
 
@@ -5717,13 +5720,20 @@ export default function Home() {
                       <div className="p-3 rounded-xl bg-surface-low border border-outline-variant/30 text-xs space-y-1">
                         <p className="font-bold text-on-surface">This money will come from:</p>
                         <p className="flex justify-between text-on-surface-variant">
-                          <span>Business money</span>
-                          <strong className="text-on-surface">GH₵{formatMoney(fromCapital)}</strong>
-                        </p>
-                        <p className="flex justify-between text-on-surface-variant">
                           <span>Profit</span>
                           <strong className="text-on-surface">GH₵{formatMoney(fromProfit)}</strong>
                         </p>
+                        {fromCapital > 0 && (
+                          <p className="flex justify-between text-on-surface-variant">
+                            <span>Business money (backup)</span>
+                            <strong className="text-on-surface">GH₵{formatMoney(fromCapital)}</strong>
+                          </p>
+                        )}
+                        {fromCapital > 0 && (
+                          <p className="pt-1 font-semibold text-amber-600 dark:text-amber-400">
+                            ⚠ Profit isn&apos;t enough — GH₵{formatMoney(fromCapital)} will come out of your business money (reserved for buying products).
+                          </p>
+                        )}
                       </div>
                     );
                   })()}
